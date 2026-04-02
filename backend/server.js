@@ -81,7 +81,8 @@ app.get("/", (req, res) => {
     <body>
       <div class="container">
 
-        <img src="https://raw.githubusercontent.com/maichjospatoh-cmyk/serial-insight-pro/main/WhatsApp%20Image%202026-01-14%20at%2012.38.50.jpeg" style="display:block; margin:0 auto;" />
+        <img src="/logo.jpeg" 
+     style="display:block; margin: 0 auto; width:120px;">
 
         <h2>LOC 7 Communications Limited</h2>
 
