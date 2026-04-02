@@ -1,127 +1,22 @@
 const express = require("express");
 const multer = require("multer");
+const path = require("path");
 const { exec } = require("child_process");
 
 const app = express();
 
-app.use(express.static(__dirname + "/.."));
+// ✅ Serve static files (logo, HTML, etc.)
+app.use(express.static(path.join(__dirname, "..")));
 
+// ✅ Multer setup (file uploads)
 const upload = multer({ dest: "uploads/" });
 
-// HOME PAGE
+// ✅ Home route (loads your HTML)
 app.get("/", (req, res) => {
-  res.send(`
-    <html>
-    <head>
-      <title>Serial Insight Pro</title>
-      <style>
-        body {
-          font-family: Arial, sans-serif;
-          background: linear-gradient(135deg, #0f5132, #198754);
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          height: 100vh;
-          margin: 0;
-        }
-
-        .container {
-          background: white;
-          padding: 30px;
-          border-radius: 15px;
-          box-shadow: 0 8px 30px rgba(0,0,0,0.2);
-          width: 420px;
-          text-align: center;
-        }
-
-        img {
-          width: 140px;
-          margin-bottom: 10px;
-        }
-
-        h2 {
-          color: #0f5132;
-          margin-bottom: 20px;
-        }
-
-        .upload-box {
-          margin: 12px 0;
-          text-align: left;
-        }
-
-        label {
-          font-weight: bold;
-          font-size: 14px;
-        }
-
-        input[type="file"] {
-          width: 100%;
-          padding: 8px;
-          border-radius: 6px;
-          border: 1px solid #ccc;
-          margin-top: 5px;
-        }
-
-        button {
-          margin-top: 20px;
-          padding: 12px;
-          width: 100%;
-          background: #dc3545;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          font-size: 16px;
-          cursor: pointer;
-          font-weight: bold;
-        }
-
-        button:hover {
-          background: #b02a37;
-        }
-      </style>
-    </head>
-
-    <body>
-      <div class="container">
-
-        <img src="/logo.jpeg" 
-     style="display:block; margin: 0 auto; width:120px;">
-
-        <h2>LOC 7 Communications Limited</h2>
-
-        <form action="/process" method="post" enctype="multipart/form-data">
-
-          <div class="upload-box">
-            <label>Upload Report 1</label>
-            <input type="file" name="files" required />
-          </div>
-
-          <div class="upload-box">
-            <label>Upload Report 2</label>
-            <input type="file" name="files" required />
-          </div>
-
-          <button type="submit">Process Reports</button>
-
-        </form>
-
-<br/>
-
-<a href="/download" style="text-decoration:none;">
-  <button type="button">Download Excel</button>
-</a>
-
-      </div>
-    </body>
-    </html>
-  `);
+    res.sendFile(path.join(__dirname, "..", "index.html"));
 });
 
-app.get("/process", (req, res) => {
-  res.redirect("/");
-});
-
-// PROCESS
+// ✅ Process route
 app.post("/process", upload.array("files"), (req, res) => {
     try {
         const files = req.files;
@@ -130,16 +25,17 @@ app.post("/process", upload.array("files"), (req, res) => {
             return res.status(400).send("Please upload at least 2 files");
         }
 
-        const { exec } = require("child_process");
+        exec(
+            `python3 processor/compare.py ${files[0].path} ${files[1].path}`,
+            (err) => {
+                if (err) {
+                    console.error(err);
+                    return res.status(500).send("Processing error: " + err.message);
+                }
 
-        exec(`python3 processor/compare.py ${files[0].path} ${files[1].path}`, (err) => {
-            if (err) {
-                console.error(err);
-                return res.status(500).send("Processing error: " + err.message);
+                res.sendFile(path.join(__dirname, "..", "preview.html"));
             }
-
-            res.sendFile(__dirname + "/../preview.html");
-        });
+        );
 
     } catch (error) {
         console.error(error);
@@ -147,22 +43,15 @@ app.post("/process", upload.array("files"), (req, res) => {
     }
 });
 
-// START SERVER
-app.listen(5000, () => {
-    console.log("Server running on port 5000");
-});
-
-  exec(`python3 processor/compare.py ${files[0].path} ${files[1].path}`, (err) => {
-    if (err) {
-  console.error(err);
-  return res.send("ERROR: " + err.message);
-}
-
-    res.sendFile(__dirname + "/../preview.html");
-  });
-});
-
+// ✅ Download route (for Excel output)
 app.get("/download", (req, res) => {
-  res.download("output.xlsx");
+    const filePath = path.join(__dirname, "..", "preview.xlsx");
+    res.download(filePath);
 });
-app.listen(5000, () => console.log("Server running"));
+
+// ✅ Start server
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
