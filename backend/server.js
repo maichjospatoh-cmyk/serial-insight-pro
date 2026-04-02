@@ -101,6 +101,12 @@ app.get("/", (req, res) => {
 
         </form>
 
+<br/>
+
+<a href="/download" style="text-decoration:none;">
+  <button type="button">Download Excel</button>
+</a>
+
       </div>
     </body>
     </html>
