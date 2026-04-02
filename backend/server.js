@@ -131,4 +131,7 @@ app.post("/process", upload.array("files"), (req, res) => {
   });
 });
 
+app.get("/download", (req, res) => {
+  res.download("output.xlsx");
+});
 app.listen(5000, () => console.log("Server running"));
