@@ -147,6 +147,10 @@ app.post("/process", upload.array("files"), (req, res) => {
     }
 });
 
+// START SERVER
+app.listen(5000, () => {
+    console.log("Server running on port 5000");
+});
 
   exec(`python3 processor/compare.py ${files[0].path} ${files[1].path}`, (err) => {
     if (err) {
