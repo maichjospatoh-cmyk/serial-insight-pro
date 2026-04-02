@@ -55,6 +55,10 @@ def read_file(file):
 df1 = clean_dataframe(read_file(file1))
 df2 = clean_dataframe(read_file(file2))
 
+# remove duplicate columns
+df1 = df1.loc[:, ~df1.columns.duplicated()]
+df2 = df2.loc[:, ~df2.columns.duplicated()]
+
 df1.columns = df1.columns.str.lower()
 df2.columns = df2.columns.str.lower()
 
@@ -70,6 +74,10 @@ serial_col2 = find_serial_column(df2)
 
 df1 = df1.rename(columns={serial_col1: 'serial number'})
 df2 = df2.rename(columns={serial_col2: 'serial number'})
+
+# ensure only one serial column exists
+df1 = df1.loc[:, ~df1.columns.duplicated()]
+df2 = df2.loc[:, ~df2.columns.duplicated()]
 
 merged = pd.merge(df1, df2, on='serial number', how='outer')
 
