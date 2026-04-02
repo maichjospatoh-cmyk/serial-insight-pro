@@ -47,7 +47,35 @@ df2 = read_file(file2)
 df1.columns = df1.columns.str.lower()
 df2.columns = df2.columns.str.lower()
 
+def find_serial_column(df):
+    for col in df.columns:
+        col_lower = col.lower()
+        if 'serial' in col_lower:
+            return col
+    raise Exception("No serial column found")
+
+serial_col1 = find_serial_column(df1)
+serial_col2 = find_serial_column(df2)
+
+df1 = df1.rename(columns={serial_col1: 'serial number'})
+df2 = df2.rename(columns={serial_col2: 'serial number'})
+
 merged = pd.merge(df1, df2, on='serial number', how='outer')
+
+def find_agent_column(df):
+    for col in df.columns:
+        col_lower = col.lower()
+        if 'agent' in col_lower or 'name' in col_lower:
+            return col
+    return None
+
+agent_col1 = find_agent_column(df1)
+agent_col2 = find_agent_column(df2)
+
+if agent_col1:
+    df1 = df1.rename(columns={agent_col1: 'agent name'})
+if agent_col2:
+    df2 = df2.rename(columns={agent_col2: 'agent name'})
 
 merged['duplicate_per_agent'] = merged.duplicated(subset=['serial number', 'agent name'], keep=False)
 merged['missing_agent'] = merged['agent name'].isna()
