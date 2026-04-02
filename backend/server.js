@@ -3,6 +3,9 @@ const multer = require("multer");
 const { exec } = require("child_process");
 
 const app = express();
+
+app.use(express.static(__dirname + "/.."));
+
 const upload = multer({ dest: "uploads/" });
 
 // HOME PAGE
