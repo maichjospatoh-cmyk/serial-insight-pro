@@ -18,7 +18,10 @@ def extract_serials(df):
     serials = []
 
     for col in df.columns:
-        for val in df[col].astype(str):
+        for val in df[col]:
+    if pd.isna(val):
+        continue
+    val = str(val)
             matches = re.findall(r'\d{10,}', val)  # detect long numbers
             serials.extend(matches)
 
