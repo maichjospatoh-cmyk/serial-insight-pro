@@ -4,8 +4,8 @@ import sys
 file1 = sys.argv[1]
 file2 = sys.argv[2]
 
-df1 = pd.read_excel(file1)
-df2 = pd.read_excel(file2)
+df1 = pd.read_excel(file1, engine="openpyxl")
+df2 = pd.read_excel(file2, engine="openpyxl")
 
 df1.columns = df1.columns.str.lower()
 df2.columns = df2.columns.str.lower()
