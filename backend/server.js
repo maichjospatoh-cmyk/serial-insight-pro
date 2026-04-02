@@ -113,6 +113,10 @@ app.get("/", (req, res) => {
   `);
 });
 
+app.get("/process", (req, res) => {
+  res.redirect("/");
+});
+
 // PROCESS
 app.post("/process", upload.array("files"), (req, res) => {
   const files = req.files;
