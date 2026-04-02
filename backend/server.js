@@ -147,9 +147,6 @@ app.post("/process", upload.array("files"), (req, res) => {
     }
 });
 
-  if (!files || files.length < 2) {
-    return res.send("Please upload at least 2 files");
-  }
 
   exec(`python3 processor/compare.py ${files[0].path} ${files[1].path}`, (err) => {
     if (err) {
