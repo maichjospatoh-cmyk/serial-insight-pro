@@ -123,9 +123,9 @@ app.post("/process", upload.array("files"), (req, res) => {
 
   exec(`python3 processor/compare.py ${files[0].path} ${files[1].path}`, (err) => {
     if (err) {
-      console.error(err);
-      return res.send("Processing error");
-    }
+  console.error(err);
+  return res.send("ERROR: " + err.message);
+}
 
     res.sendFile(__dirname + "/../preview.html");
   });
