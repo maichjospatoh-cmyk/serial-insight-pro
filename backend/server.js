@@ -121,7 +121,7 @@ app.post("/process", upload.array("files"), (req, res) => {
       return res.send("Processing error");
     }
 
-    res.download("output.xlsx");
+    res.sendFile(__dirname + "/../preview.html");
   });
 });
 
