@@ -19,10 +19,11 @@ def extract_serials(df):
 
     for col in df.columns:
         for val in df[col]:
-    if pd.isna(val):
-        continue
-    val = str(val)
-            matches = re.findall(r'\d{10,}', val)  # detect long numbers
+            if pd.isna(val):
+                continue
+
+            val = str(val)
+            matches = re.findall(r'\d{10,}', val)
             serials.extend(matches)
 
     return pd.DataFrame({"serial number": list(set(serials))})
