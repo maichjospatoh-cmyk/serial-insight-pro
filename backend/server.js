@@ -123,7 +123,29 @@ app.get("/process", (req, res) => {
 
 // PROCESS
 app.post("/process", upload.array("files"), (req, res) => {
-  const files = req.files;
+    try {
+        const files = req.files;
+
+        if (!files || files.length < 2) {
+            return res.status(400).send("Please upload at least 2 files");
+        }
+
+        const { exec } = require("child_process");
+
+        exec(`python3 processor/compare.py ${files[0].path} ${files[1].path}`, (err) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).send("Processing error: " + err.message);
+            }
+
+            res.sendFile(__dirname + "/../preview.html");
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Server error");
+    }
+});
 
   if (!files || files.length < 2) {
     return res.send("Please upload at least 2 files");
