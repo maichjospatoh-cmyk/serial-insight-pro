@@ -26,3 +26,7 @@ def classify(row):
 merged['status'] = merged.apply(classify, axis=1)
 
 merged.to_excel("output.xlsx", index=False)
+
+# Also save preview (first 20 rows)
+preview = merged.head(20)
+preview.to_html("preview.html", index=False)
