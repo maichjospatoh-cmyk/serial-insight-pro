@@ -1,3 +1,14 @@
+def clean_dataframe(df):
+    # If only 1 column → split it
+    if len(df.columns) == 1:
+        col = df.columns[0]
+
+        df[['agent name', 'serial number', 'date']] = df[col].str.extract(
+            r'([A-Za-z\s]+)\s+(\d{10,})\s+([\d\-\/]+)'
+        )
+
+    return df
+
 import pandas as pd
 import sys
 import os
@@ -41,8 +52,8 @@ def read_file(file):
         raise Exception(f"File processing failed: {str(e)}")
 
 
-df1 = read_file(file1)
-df2 = read_file(file2)
+df1 = clean_dataframe(read_file(file1))
+df2 = clean_dataframe(read_file(file2))
 
 df1.columns = df1.columns.str.lower()
 df2.columns = df2.columns.str.lower()
