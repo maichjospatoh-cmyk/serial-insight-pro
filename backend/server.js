@@ -37,6 +37,18 @@ app.post("/process", upload.array("files"), (req, res) => {
             }
         );
 
+        app.get("/download", (req, res) => {
+  const path = require("path");
+  const filePath = path.join(__dirname, "../processor/output.xlsx");
+
+  res.download(filePath, "result.xlsx", (err) => {
+    if (err) {
+      console.error(err);
+      res.status(500).send("File not found");
+    }
+  });
+});
+
     } catch (error) {
         console.error(error);
         res.status(500).send("Server error");
