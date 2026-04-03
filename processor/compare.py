@@ -9,32 +9,10 @@ def read_file(file):
     try:
         return pd.read_excel(file)
     except:
-        try:
-            return pd.read_csv(file, encoding='latin1')
-        except:
-            raise Exception("Unsupported file format")
+        return pd.read_csv(file, encoding='latin1')
 
-import re
-import pandas as pd
-
-def extract_serials(df):
-    serials = []
-    
-    for col in df.columns:
-        for val in df[col]:
-            if pd.isna(val):
-                continue
-
-            val = str(val)
-
-            # Extract long numbers (serials)
-            matches = re.findall(r'\d{10,}', val)
-
-            for m in matches:
-                serials.append(m)
-
-    return pd.DataFrame({"serial number": serials})
-    serials = []
+def extract_data(df):
+    data = []
 
     for col in df.columns:
         for val in df[col]:
@@ -42,35 +20,75 @@ def extract_serials(df):
                 continue
 
             val = str(val)
-            matches = re.findall(r'\d{10,}', val)
-            serials.extend(matches)
 
-    return pd.DataFrame({"serial number": list(set(serials))})
+            # Extract serial (long numbers)
+            serials = re.findall(r'\d{10,}', val)
 
-df1 = extract_serials(read_file(file1))
-df2 = extract_serials(read_file(file2))
+            # Extract date
+            date = re.findall(r'\d{4}[-/]\d{2}[-/]\d{2}', val)
 
-# merge safely
+            # Extract vehicle plate (KCW, KCN etc)
+            plate = re.findall(r'K[A-Z]{2}\s?\d+[A-Z]?', val)
+
+            # Extract name (text before number)
+            name_match = re.match(r'([A-Za-z\s]+)', val)
+
+            agent = name_match.group(1).strip() if name_match else ""
+
+            for s in serials:
+                data.append({
+                    "agent name": agent,
+                    "serial number": s,
+                    "date": date[0] if date else "",
+                    "van": plate[0] if plate else ""
+                })
+
+    return pd.DataFrame(data)
+
+df1 = extract_data(read_file(file1))
+df2 = extract_data(read_file(file2))
+
+# remove duplicates
+df1 = df1.drop_duplicates()
+df2 = df2.drop_duplicates()
+
+# merge
 merged = pd.merge(
-    df1.drop_duplicates(),
-    df2.drop_duplicates(),
+    df1,
+    df2,
     on="serial number",
     how="outer",
-    indicator=True
+    indicator=True,
+    suffixes=("_file1", "_file2")
 )
 
+# status
 merged["status"] = merged["_merge"].map({
     "both": "MATCHED",
     "left_only": "ONLY IN FILE 1",
     "right_only": "ONLY IN FILE 2"
 })
 
-merged["status"] = merged["_merge"].map({
-    "both": "matched",
-    "left_only": "only in file 1",
-    "right_only": "only in file 2"
-})
+# choose best values
+merged["agent name"] = merged["agent name_file1"].fillna(merged["agent name_file2"])
+merged["date"] = merged["date_file1"].fillna(merged["date_file2"])
+merged["van"] = merged["van_file1"].fillna(merged["van_file2"])
 
-merged.drop(columns=["_merge"], inplace=True)
+# duplicate per agent
+merged["duplicate_per_agent"] = merged.duplicated(
+    subset=["agent name", "serial number"], keep=False
+)
 
-merged.to_excel("preview.xlsx", index=False)
+# final output
+final = merged[[
+    "agent name",
+    "serial number",
+    "van",
+    "date",
+    "status",
+    "duplicate_per_agent"
+]]
+
+# export
+final.to_excel("preview.xlsx", index=False)
+final.head(50).to_html("preview.html", index=False)
