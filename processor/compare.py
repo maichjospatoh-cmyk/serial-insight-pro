@@ -11,9 +11,35 @@ def read_file(file):
     except:
         return pd.read_csv(file, encoding='latin1')
 
-def extract_data(df):
+def extract_serials(df):
+    import re
     data = []
+
     current_agent = ""
+    current_date = ""
+    current_plate = ""
+
+    for val in df.values.flatten():
+        if pd.isna(val):
+            continue
+
+        val = str(val).strip()
+
+        if not re.search(r'\d{5,}', val) and len(val) > 3:
+            current_agent = val
+            continue
+
+        serials = re.findall(r'\d{10,}', val)
+
+        for s in serials:
+            data.append({
+                "agent name": current_agent,
+                "serial number": s,
+                "date": current_date,
+                "van": current_plate
+            })
+
+    return pd.DataFrame(data)
 
     for col in df.columns:
         for val in df[col]:
