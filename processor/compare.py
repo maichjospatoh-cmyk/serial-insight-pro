@@ -13,31 +13,32 @@ def read_file(file):
 
 def extract_data(df):
     data = []
+    current_agent = ""
 
     for col in df.columns:
         for val in df[col]:
             if pd.isna(val):
                 continue
 
-            val = str(val)
+            val = str(val).strip()
 
-            # Extract serial (long numbers)
+            # Detect agent name (text only)
+            if re.match(r'^[A-Za-z\s]+$', val) and len(val) > 3:
+                current_agent = val
+                continue
+
+            # Extract serial numbers
             serials = re.findall(r'\d{10,}', val)
 
             # Extract date
             date = re.findall(r'\d{4}[-/]\d{2}[-/]\d{2}', val)
 
-            # Extract vehicle plate (KCW, KCN etc)
+            # Extract vehicle
             plate = re.findall(r'K[A-Z]{2}\s?\d+[A-Z]?', val)
-
-            # Extract name (text before number)
-            name_match = re.match(r'([A-Za-z\s]+)', val)
-
-            agent = name_match.group(1).strip() if name_match else ""
 
             for s in serials:
                 data.append({
-                    "agent name": agent,
+                    "agent name": current_agent,
                     "serial number": s,
                     "date": date[0] if date else "",
                     "van": plate[0] if plate else ""
