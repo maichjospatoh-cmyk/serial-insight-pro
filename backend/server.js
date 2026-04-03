@@ -41,6 +41,10 @@ app.post("/process", upload.array("files"), (req, res) => {
   const path = require("path");
   const filePath = path.join(__dirname, "../processor/output.xlsx");
 
+  app.get("/download", (req, res) => {
+  const path = require("path");
+  const filePath = path.join(__dirname, "../output.xlsx");
+
   res.download(filePath, "result.xlsx", (err) => {
     if (err) {
       console.error(err);
