@@ -15,13 +15,21 @@ def extract_serials(df):
     import re
     data = []
 
-    current_agent = ""
-    current_date = ""
-    current_plate = ""
-
-    for val in df.values.flatten():
+for val in df.values.flatten():
     if pd.isna(val):
         continue
+
+    val = str(val).strip()
+
+    serials = re.findall(r'\d{10,}', val)
+
+    for s in serials:
+        data.append({
+            "agent name": current_agent,
+            "serial number": s,
+            "date": current_date,
+            "van": current_plate
+        })
 
     val = str(val).strip()
 
