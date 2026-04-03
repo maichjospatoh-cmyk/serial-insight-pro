@@ -75,9 +75,9 @@ merged["agent name"] = merged["agent name_file1"].fillna(merged["agent name_file
 merged["date"] = merged["date_file1"].fillna(merged["date_file2"])
 merged["van"] = merged["van_file1"].fillna(merged["van_file2"])
 
-# duplicate per agent
 merged["duplicate_per_agent"] = merged.duplicated(
-    subset=["agent name", "serial number"], keep=False
+    subset=["agent name"],
+    keep=False
 )
 
 # final output
