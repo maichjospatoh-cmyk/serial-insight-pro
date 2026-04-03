@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Serial Insight Pro</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #f4f6f9;
+            text-align: center;
+        }
+
+        .container {
+            margin-top: 50px;
+        }
+
+        img {
+            width: 120px;
+            margin-bottom: 10px;
+        }
+
+        h2 {
+            margin-bottom: 30px;
+        }
+
+        .upload-box {
+            margin: 15px auto;
+        }
+
+        input {
+            padding: 10px;
+        }
+
+        button {
+            padding: 12px 25px;
+            background: green;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: darkgreen;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <!-- LOGO -->
+    <img src="/logo.jpeg" />
+
+    <h2>LOC 7 Communications Limited</h2>
+
+    <form action="/process" method="post" enctype="multipart/form-data">
+
+        <div class="upload-box">
+            <label>Upload Report 1</label><br>
+            <input type="file" name="files" required>
+        </div>
+
+        <div class="upload-box">
+            <label>Upload Report 2</label><br>
+            <input type="file" name="files" required>
+        </div>
+
+        <br>
+        <button type="submit">Process Reports</button>
+
+    </form>
+
+</div>
+
+</body>
+</html>
