@@ -20,24 +20,20 @@ def extract_serials(df):
     current_plate = ""
 
     for val in df.values.flatten():
-        if pd.isna(val):
-            continue
+    if pd.isna(val):
+        continue
 
-        val = str(val).strip()
+    val = str(val).strip()
 
-        if not re.search(r'\d{5,}', val) and len(val) > 3:
-            current_agent = val
-            continue
+    serials = re.findall(r'\d{10,}', val)
 
-        serials = re.findall(r'\d{10,}', val)
-
-        for s in serials:
-            data.append({
-                "agent name": current_agent,
-                "serial number": s,
-                "date": current_date,
-                "van": current_plate
-            })
+    for s in serials:
+        data.append({
+            "agent name": current_agent,
+            "serial number": s,
+            "date": current_date,
+            "van": current_plate
+        })
 
     return pd.DataFrame(data)
 
