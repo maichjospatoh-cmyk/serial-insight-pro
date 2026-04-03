@@ -30,11 +30,11 @@ def extract_data(df):
             # Extract serial numbers
             serials = re.findall(r'\d{10,}', val)
 
-            # Extract date
-            date = re.findall(r'\d{4}[-/]\d{2}[-/]\d{2}', val)
+# Detect dates like 2026-04-02 OR 2/4/2026 OR 02-04-2026
+date = re.findall(r'\d{1,4}[-/]\d{1,2}[-/]\d{2,4}', val)
 
-            # Extract vehicle
-            plate = re.findall(r'K[A-Z]{2}\s?\d+[A-Z]?', val)
+# Detect plates like KCW123A, KCN 234B, KDA123
+plate = re.findall(r'K[A-Z]{2}\s?\d{2,4}[A-Z]?', val)
 
             for s in serials:
                 data.append({
