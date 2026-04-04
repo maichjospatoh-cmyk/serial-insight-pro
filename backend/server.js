@@ -18,16 +18,30 @@ app.use(session({
   saveUninitialized: true
 }));
 
-// LOGIN PAGE
+// 🔐 LOGIN PAGE
 app.get("/login", (req, res) => {
   res.send(`
-    <div style="text-align:center;margin-top:100px;">
-      <h2>Login</h2>
-      <form method="post">
-        <input name="username" placeholder="Username"/><br><br>
-        <input name="password" type="password" placeholder="Password"/><br><br>
-        <button>Login</button>
-      </form>
+    <div style="text-align:center; margin-top:80px; font-family:Arial;">
+      <img src="/logo.jpeg" width="120"/>
+      <h2 style="color:green;">LOC 7 Communications Limited</h2>
+
+      <div style="display:inline-block;padding:30px;border-radius:10px;
+      box-shadow:0 0 10px rgba(0,0,0,0.1);">
+
+        <h3>Login</h3>
+
+        <form method="post">
+          <input name="username" placeholder="Username"
+          style="padding:10px;width:200px;"><br><br>
+
+          <input name="password" type="password" placeholder="Password"
+          style="padding:10px;width:200px;"><br><br>
+
+          <button style="padding:10px 20px;background:green;color:white;border:none;">
+            Login
+          </button>
+        </form>
+      </div>
     </div>
   `);
 });
@@ -38,7 +52,13 @@ app.post("/login", (req, res) => {
   if (!user) return res.send("Invalid login");
 
   req.session.user = user;
-  res.redirect("/");
+  res.redirect("/home");
+});
+
+// LOGOUT
+app.get("/logout", (req, res) => {
+  req.session.destroy();
+  res.redirect("/login");
 });
 
 // PROTECT ROUTES
@@ -47,32 +67,49 @@ function requireLogin(req, res, next) {
   next();
 }
 
-// HOME
-app.get("/", requireLogin, (req, res) => {
-  res.send(`
-    <div style="text-align:center;">
-      <img src="/logo.jpeg" width="120"/>
-      <h2>Serial Insight Pro</h2>
+// ROOT REDIRECT
+app.get("/", (req, res) => {
+  if (!req.session.user) return res.redirect("/login");
+  res.redirect("/home");
+});
 
-      <form action="/process" method="post" enctype="multipart/form-data">
+// 🏠 HOME PAGE
+app.get("/home", requireLogin, (req, res) => {
+  res.send(`
+    <div style="text-align:center;font-family:Arial;">
+      <img src="/logo.jpeg" width="120"/>
+      <h2 style="color:green;">Serial Insight Pro</h2>
+
+      <form id="uploadForm" action="/process" method="post" enctype="multipart/form-data">
         <p>Upload Report 1</p>
         <input type="file" name="files" required><br><br>
 
         <p>Upload Report 2</p>
         <input type="file" name="files" required><br><br>
 
-        <button style="padding:10px;background:green;color:white">
-          Process
+        <button style="padding:12px 25px;background:green;color:white;border:none;">
+          Process Reports
         </button>
       </form>
 
       <br>
-      <a href="/dashboard">Dashboard</a>
+      <a href="/dashboard">Dashboard</a> |
+      <a href="/logout">Logout</a>
+
+      <div id="loading" style="display:none;margin-top:20px;">
+        <p>Processing... please wait ⏳</p>
+      </div>
+
+      <script>
+        document.getElementById("uploadForm").addEventListener("submit", function(){
+          document.getElementById("loading").style.display = "block";
+        });
+      </script>
     </div>
   `);
 });
 
-// PROCESS
+// ⚙️ PROCESS
 app.post("/process", requireLogin, upload.array("files", 2), (req, res) => {
   const file1 = req.files[0].path;
   const file2 = req.files[1].path;
@@ -83,23 +120,23 @@ app.post("/process", requireLogin, upload.array("files", 2), (req, res) => {
     if (err) return res.send(`<pre>${stderr}</pre>`);
 
     res.send(`
-      <div style="text-align:center;">
+      <div style="text-align:center;font-family:Arial;">
         <h2>Processing Complete ✅</h2>
 
         <a href="/download">
-          <button style="padding:10px;background:green;color:white">
+          <button style="padding:12px 25px;background:green;color:white;">
             Download Excel
           </button>
         </a>
 
         <br><br>
-        <a href="/">Back</a>
+        <a href="/home">Back</a>
       </div>
     `);
   });
 });
 
-// DOWNLOAD
+// 📥 DOWNLOAD
 app.get("/download", requireLogin, (req, res) => {
   const file = path.join(__dirname, "..", "output", "result.xlsx");
 
@@ -110,10 +147,11 @@ app.get("/download", requireLogin, (req, res) => {
   res.download(file);
 });
 
-// DASHBOARD
+// 📊 DASHBOARD
 app.get("/dashboard", requireLogin, (req, res) => {
   res.send(`
-    <h2 style="text-align:center">Dashboard</h2>
+    <h2 style="text-align:center;">Dashboard</h2>
+
     <canvas id="chart"></canvas>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -121,7 +159,7 @@ app.get("/dashboard", requireLogin, (req, res) => {
       const data = {
         labels: ["Agent A", "Agent B"],
         datasets: [{
-          label: "Lines",
+          label: "Performance",
           data: [50, 30]
         }]
       };
@@ -132,8 +170,8 @@ app.get("/dashboard", requireLogin, (req, res) => {
       });
     </script>
 
-    <div style="text-align:center">
-      <a href="/">Back</a>
+    <div style="text-align:center;margin-top:20px;">
+      <a href="/home">Back</a>
     </div>
   `);
 });
