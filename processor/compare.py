@@ -51,6 +51,9 @@ merged = pd.merge(
     indicator=True
 )
 
+# combine agent names from both files
+merged["agent name"] = merged["agent name_x"].combine_first(merged["agent name_y"])
+
 merged["status"] = merged["_merge"].map({
     "both": "MATCHED",
     "left_only": "ONLY IN FILE 1",
