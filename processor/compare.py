@@ -1,22 +1,21 @@
 import pandas as pd
-import sys
 import re
+import sys
+import os
 
 file1 = sys.argv[1]
 file2 = sys.argv[2]
+
 
 def read_file(file):
     try:
         return pd.read_excel(file, engine="openpyxl")
     except:
-        return pd.read_csv(file, encoding="latin1")
+        try:
+            return pd.read_csv(file, encoding="latin1")
+        except:
+            raise Exception("Unsupported file format")
 
-def extract_data(df):
-    data = []
-    current_agent = ""
-
-    import re
-import pandas as pd
 
 def extract_serials(df):
     data = []
@@ -28,7 +27,6 @@ def extract_serials(df):
 
         val = str(val).strip()
 
-        # detect agent name (not numbers)
         clean_name = re.sub(r'[^A-Za-z\s]', '', val).strip()
         clean_name = re.sub(r'\b(lines?|line)\b', '', clean_name, flags=re.IGNORECASE).strip()
 
@@ -36,7 +34,6 @@ def extract_serials(df):
             current_agent = clean_name
             continue
 
-        # extract serial numbers
         serials = re.findall(r'\d{10,}', val)
 
         for s in serials:
@@ -47,47 +44,38 @@ def extract_serials(df):
 
     return pd.DataFrame(data)
 
+
+# READ FILES
 df1 = extract_serials(read_file(file1))
 df2 = extract_serials(read_file(file2))
 
+# CLEAN
 df1 = df1.drop_duplicates()
 df2 = df2.drop_duplicates()
 
-merged = pd.merge(
-    df1,
-    df2,
-    on="serial number",
-    how="outer",
-    indicator=True
-)
+# MERGE
+merged = pd.merge(df1, df2, on="serial number", how="outer", indicator=True)
 
-# combine agent names from both files
-merged["agent name"] = merged["agent name_x"].combine_first(merged["agent name_y"])
-
+# STATUS
 merged["status"] = merged["_merge"].map({
-    "both": "MATCHED",
     "left_only": "ONLY IN FILE 1",
-    "right_only": "ONLY IN FILE 2"
+    "right_only": "ONLY IN FILE 2",
+    "both": "MATCHED"
 })
 
+merged.drop(columns=["_merge"], inplace=True)
+
+# FIX AGENT NAME (combine both sides)
+merged["agent name"] = merged["agent name_x"].fillna("") + merged["agent name_y"].fillna("")
+merged.drop(columns=["agent name_x", "agent name_y"], inplace=True)
+
+# DUPLICATES
 merged["duplicate_per_agent"] = merged.duplicated(
-    subset=["agent name"],
-    keep=False
+    subset=["agent name", "serial number"], keep=False
 )
 
-final = merged[[
-    "agent name",
-    "serial number",
-    "status",
-    "duplicate_per_agent"
-]]
+# SAVE OUTPUT
+os.makedirs("output", exist_ok=True)
+merged.to_excel("output/result.xlsx", index=False)
 
-final = final.sort_values(by=["agent name", "serial number"])
-
-# Save to ROOT (IMPORTANT)
-final.to_excel("output.xlsx", index=False)
-
-# Preview page
-final.head(50).to_html("preview.html", index=False)
-
-print("DONE")
+print("Processing complete. Download ready.")
