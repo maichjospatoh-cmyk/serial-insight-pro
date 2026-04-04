@@ -47,8 +47,8 @@ def extract_serials(df):
 
     return pd.DataFrame(data)
 
-df1 = extract_data(read_file(file1))
-df2 = extract_data(read_file(file2))
+df1 = extract_serials(read_file(file1))
+df2 = extract_serials(read_file(file2))
 
 df1 = df1.drop_duplicates()
 df2 = df2.drop_duplicates()
