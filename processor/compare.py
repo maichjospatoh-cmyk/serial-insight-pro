@@ -19,11 +19,13 @@ def extract_data(df):
         if pd.isna(val):
             continue
 
-        val = str(val).strip()
+        # clean agent name (remove numbers, 'lines', symbols)
+clean_name = re.sub(r'[^A-Za-z\s]', '', val).strip()
+clean_name = re.sub(r'\b(lines?|line)\b', '', clean_name, flags=re.IGNORECASE).strip()
 
         # detect agent names (text without numbers)
         if not re.search(r'\d{5,}', val) and len(val) > 3:
-            current_agent = val
+            current_agent = clean_name
             continue
 
         # extract serials
@@ -34,6 +36,10 @@ def extract_data(df):
                 "agent name": current_agent,
                 "serial number": s
             })
+
+df = pd.DataFrame(data)
+df = df[df["agent name"] != ""]
+return df
 
     return pd.DataFrame(data)
 
@@ -71,6 +77,8 @@ final = merged[[
     "status",
     "duplicate_per_agent"
 ]]
+
+final = final.sort_values(by=["agent name", "serial number"])
 
 # Save to ROOT (IMPORTANT)
 final.to_excel("output.xlsx", index=False)
