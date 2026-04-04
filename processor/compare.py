@@ -1,24 +1,16 @@
 import pandas as pd
-import re
 import sys
+import re
 import os
-from openpyxl import load_workbook
-from openpyxl.styles import PatternFill
 
 file1 = sys.argv[1]
 file2 = sys.argv[2]
 
-
-def read_file(file):
-    try:
-        return pd.read_excel(file, engine="openpyxl")
-    except:
-        return pd.read_csv(file, encoding="latin1")
-
-
-def extract_serials(df):
+def extract(file):
+    df = pd.read_excel(file, header=None)
     data = []
-    current_agent = ""
+    agent = ""
+    current_date = ""
 
     for val in df.values.flatten():
         if pd.isna(val):
@@ -26,111 +18,61 @@ def extract_serials(df):
 
         val = str(val).strip()
 
-        clean_name = re.sub(r'[^A-Za-z\s]', '', val).strip()
-        clean_name = re.sub(r'\b(lines?|line)\b', '', clean_name, flags=re.IGNORECASE).strip()
-
-        if not re.search(r'\d{5,}', val) and len(clean_name) > 2:
-            current_agent = clean_name
+        # DATE DETECTION
+        parsed = pd.to_datetime(val, errors='coerce')
+        if pd.notna(parsed):
+            current_date = parsed.date()
             continue
 
-        serials = re.findall(r'\d{10,}', val)
+        # CLEAN NAME
+        clean = re.sub(r'[^A-Za-z\s]', '', val)
+        clean = re.sub(r'\b(lines?|line)\b', '', clean, flags=re.IGNORECASE).strip()
 
-        van_match = re.search(r'\bK[A-Z]{2}\s?\d{3}[A-Z]?\b', val.upper())
-        van_plate = van_match.group(0) if van_match else ""
+        if not re.search(r'\d{5,}', val) and len(clean) > 2:
+            agent = clean
+            continue
+
+        # SERIAL
+        serials = re.findall(r'\d{10,}', val)
 
         for s in serials:
             data.append({
-                "agent name": current_agent,
+                "agent name": agent,
                 "serial number": s,
-                "van plate": van_plate
+                "date": str(current_date)
             })
 
     return pd.DataFrame(data)
 
+df1 = extract(file1)
+df2 = extract(file2)
 
-# PROCESS
-df1 = extract_serials(read_file(file1))
-df2 = extract_serials(read_file(file2))
+merged = pd.merge(df1, df2, on="serial number", how="outer", suffixes=("_1","_2"))
 
-df1 = df1.drop_duplicates()
-df2 = df2.drop_duplicates()
+merged["agent name"] = merged["agent name_1"].combine_first(merged["agent name_2"])
 
-merged = pd.merge(
-    df1,
-    df2,
-    on="serial number",
-    how="outer",
-    suffixes=("_file1", "_file2"),
-    indicator=True
+merged["status"] = merged.apply(
+    lambda x: "MATCHED" if pd.notna(x["agent name_1"]) and pd.notna(x["agent name_2"])
+    else ("ONLY IN FILE 1" if pd.notna(x["agent name_1"]) else "ONLY IN FILE 2"),
+    axis=1
 )
-
-merged["status"] = merged["_merge"].map({
-    "left_only": "ONLY IN FILE 1",
-    "right_only": "ONLY IN FILE 2",
-    "both": "MATCHED"
-})
-
-merged["agent name"] = merged["agent name_file1"].fillna("") + merged["agent name_file2"].fillna("")
-merged["van plate"] = merged["van plate_file1"].fillna("") + merged["van plate_file2"].fillna("")
-
-merged.drop(columns=[
-    "agent name_file1", "agent name_file2",
-    "van plate_file1", "van plate_file2",
-    "_merge"
-], inplace=True)
 
 merged["duplicate_per_agent"] = merged.duplicated(
-    subset=["agent name", "serial number"], keep=False
+    subset=["agent name", "serial number"],
+    keep=False
 )
 
-merged = merged[[
+merged["date"] = merged["date_1"].combine_first(merged["date_2"])
+
+final = merged[[
     "agent name",
     "serial number",
-    "van plate",
+    "date",
     "status",
     "duplicate_per_agent"
 ]]
 
-# 📊 SUMMARY
-summary = merged.groupby("agent name").agg(
-    total_lines=("serial number", "count"),
-    duplicates=("duplicate_per_agent", "sum")
-).reset_index()
-
-summary["performance_rank"] = summary["total_lines"].rank(ascending=False, method="dense")
-
-# SAVE
 os.makedirs("output", exist_ok=True)
-file_path = "output/result.xlsx"
+final.to_excel("output/result.xlsx", index=False)
 
-with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
-    merged.to_excel(writer, index=False, sheet_name="Results")
-    summary.to_excel(writer, index=False, sheet_name="Dashboard")
-
-# 🎨 APPLY COLORS
-wb = load_workbook(file_path)
-ws = wb["Results"]
-
-green = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
-red = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
-yellow = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
-
-for row in ws.iter_rows(min_row=2):
-    status = row[3].value
-    duplicate = row[4].value
-
-    if status == "MATCHED":
-        for cell in row:
-            cell.fill = green
-
-    if duplicate:
-        for cell in row:
-            cell.fill = red
-
-    if "ONLY" in str(status):
-        for cell in row:
-            cell.fill = yellow
-
-wb.save(file_path)
-
-print("Professional report generated successfully ✅")
+print("DONE")
