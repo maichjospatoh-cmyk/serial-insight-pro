@@ -15,31 +15,35 @@ def extract_data(df):
     data = []
     current_agent = ""
 
+    import re
+import pandas as pd
+
+def extract_serials(df):
+    data = []
+    current_agent = ""
+
     for val in df.values.flatten():
-    if pd.isna(val):
-        continue
+        if pd.isna(val):
+            continue
 
-    val = str(val).strip()
+        val = str(val).strip()
 
-    # clean agent name
-    clean_name = re.sub(r'[^A-Za-z\s]', '', val).strip()
-    clean_name = re.sub(r'\b(lines?|line)\b', '', clean_name, flags=re.IGNORECASE).strip()
+        # detect agent name (not numbers)
+        clean_name = re.sub(r'[^A-Za-z\s]', '', val).strip()
+        clean_name = re.sub(r'\b(lines?|line)\b', '', clean_name, flags=re.IGNORECASE).strip()
 
-    if not re.search(r'\d{5,}', val) and len(clean_name) > 2:
-        current_agent = clean_name
-        continue
+        if not re.search(r'\d{5,}', val) and len(clean_name) > 2:
+            current_agent = clean_name
+            continue
 
-    serials = re.findall(r'\d{10,}', val)
+        # extract serial numbers
+        serials = re.findall(r'\d{10,}', val)
 
-    for s in serials:
-        data.append({
-            "agent name": current_agent,
-            "serial number": s
-        })
-
-df = pd.DataFrame(data)
-df = df[df["agent name"] != ""]
-return df
+        for s in serials:
+            data.append({
+                "agent name": current_agent,
+                "serial number": s
+            })
 
     return pd.DataFrame(data)
 
