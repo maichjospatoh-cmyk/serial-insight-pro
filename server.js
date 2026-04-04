@@ -19,6 +19,18 @@ app.use(session({
   saveUninitialized: true
 }));
 
+const USERS_FILE = "users.json";
+
+// 📥 LOAD USERS
+function getUsers() {
+  return JSON.parse(fs.readFileSync(USERS_FILE));
+}
+
+// 💾 SAVE USERS
+function saveUsers(users) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+}
+
 // 🔐 LOGIN PAGE
 app.get("/login", (req, res) => {
   res.send(`
@@ -29,7 +41,7 @@ app.get("/login", (req, res) => {
       <form method="post">
         <input name="username" placeholder="Username"><br><br>
         <input name="password" type="password" placeholder="Password"><br><br>
-        <button style="padding:10px;background:green;color:white;">Login</button>
+        <button>Login</button>
       </form>
     </div>
   `);
@@ -37,11 +49,16 @@ app.get("/login", (req, res) => {
 
 // 🔐 LOGIN LOGIC
 app.post("/login", (req, res) => {
-  if (req.body.username === "admin" && req.body.password === "admin123") {
-    req.session.user = true;
-    return res.redirect("/");
-  }
-  res.send("Invalid login");
+  const users = getUsers();
+
+  const user = users.find(
+    u => u.username === req.body.username && u.password === req.body.password
+  );
+
+  if (!user) return res.send("Invalid login");
+
+  req.session.user = user.username;
+  res.redirect("/home");
 });
 
 // 🔒 AUTH
@@ -50,42 +67,57 @@ function requireLogin(req, res, next) {
   next();
 }
 
-// ROOT
-app.get("/", (req, res) => {
-  if (!req.session.user) return res.redirect("/login");
-  res.redirect("/home");
-});
-
-// 🏠 HOME PAGE
+// 🏠 HOME
 app.get("/home", requireLogin, (req, res) => {
   res.send(`
     <div style="text-align:center;font-family:Arial;">
       <img src="/logo.jpeg" width="120"/>
-      <h2 style="color:green;">Serial Insight Pro</h2>
+      <h2>Welcome ${req.session.user}</h2>
 
-      <form id="form" action="/process" method="post" enctype="multipart/form-data">
-        <p>Upload Report 1</p>
+      <form action="/process" method="post" enctype="multipart/form-data">
         <input type="file" name="files" required><br><br>
-
-        <p>Upload Report 2</p>
         <input type="file" name="files" required><br><br>
-
-        <button style="padding:12px;background:green;color:white;">Process</button>
+        <button>Process</button>
       </form>
 
-      <div id="loading" style="display:none;margin-top:20px;">
-        Processing... ⏳
-      </div>
-
       <br>
+      <a href="/change-password">Change Password</a> |
       <a href="/logout">Logout</a>
-
-      <script>
-        document.getElementById("form").onsubmit = () => {
-          document.getElementById("loading").style.display = "block";
-        }
-      </script>
     </div>
+  `);
+});
+
+// 🔑 CHANGE PASSWORD PAGE
+app.get("/change-password", requireLogin, (req, res) => {
+  res.send(`
+    <div style="text-align:center;margin-top:100px;">
+      <h2>Change Password</h2>
+
+      <form method="post">
+        <input name="oldPassword" type="password" placeholder="Old Password"><br><br>
+        <input name="newPassword" type="password" placeholder="New Password"><br><br>
+        <button>Update</button>
+      </form>
+    </div>
+  `);
+});
+
+// 🔑 CHANGE PASSWORD LOGIC
+app.post("/change-password", requireLogin, (req, res) => {
+  const users = getUsers();
+
+  const userIndex = users.findIndex(u => u.username === req.session.user);
+
+  if (users[userIndex].password !== req.body.oldPassword) {
+    return res.send("Old password incorrect ❌");
+  }
+
+  users[userIndex].password = req.body.newPassword;
+  saveUsers(users);
+
+  res.send(`
+    <h2>Password Updated ✅</h2>
+    <a href="/home">Back</a>
   `);
 });
 
@@ -103,21 +135,12 @@ app.post("/process", requireLogin, upload.array("files", 2), (req, res) => {
   if (!fs.existsSync("output")) fs.mkdirSync("output");
 
   exec(`python3 processor/compare.py ${f1} ${f2}`, (err, stdout, stderr) => {
-    if (err) return res.send(`<pre>${stderr}</pre>`);
+    if (err) return res.send(stderr);
 
     res.send(`
-      <div style="text-align:center;font-family:Arial;">
-        <h2>Processing Complete ✅</h2>
-
-        <a href="/download">
-          <button style="padding:12px;background:green;color:white;">
-            Download Excel
-          </button>
-        </a>
-
-        <br><br>
-        <a href="/home">Back</a>
-      </div>
+      <h2>Done ✅</h2>
+      <a href="/download">Download Excel</a><br><br>
+      <a href="/home">Back</a>
     `);
   });
 });
@@ -126,13 +149,10 @@ app.post("/process", requireLogin, upload.array("files", 2), (req, res) => {
 app.get("/download", requireLogin, (req, res) => {
   const file = path.join(__dirname, "output", "result.xlsx");
 
-  if (!fs.existsSync(file)) {
-    return res.send("File not found ❌");
-  }
+  if (!fs.existsSync(file)) return res.send("File not found");
 
   res.download(file);
 });
 
-// 🚀 START SERVER
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log("Server running"));
