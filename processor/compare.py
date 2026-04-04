@@ -18,26 +18,25 @@ def extract(file):
 
         val = str(val).strip()
 
-        # 📅 DATE DETECTION
+        # DATE DETECTION
         parsed = pd.to_datetime(val, errors='coerce')
         if pd.notna(parsed):
             current_date = parsed.date()
             continue
 
-        # 👤 CLEAN AGENT NAME
+        # CLEAN AGENT NAME
         clean = re.sub(r'[^A-Za-z\s]', '', val)
         clean = re.sub(r'\b(lines?|line)\b', '', clean, flags=re.IGNORECASE).strip()
 
-        # Detect agent
         if not re.search(r'\d', val) and len(clean) > 2:
             agent = clean
             continue
 
-        # 🔢 SERIAL EXTRACTION (KEY FIX)
+        # SERIAL EXTRACTION (KEY LOGIC)
         matches = re.findall(r'89254021\d+', val)
 
         for m in matches:
-            serial = m[m.find("89254021"):]  # extract from prefix
+            serial = m[m.find("89254021"):]
 
             data.append({
                 "agent name": agent,
@@ -47,33 +46,29 @@ def extract(file):
 
     return pd.DataFrame(data)
 
-# 🔄 PROCESS BOTH FILES
+# PROCESS
 df1 = extract(file1)
 df2 = extract(file2)
 
-# 🧩 MERGE
+# MERGE
 merged = pd.merge(df1, df2, on="serial number", how="outer", suffixes=("_1","_2"))
 
-# 👤 FINAL AGENT NAME
 merged["agent name"] = merged["agent name_1"].combine_first(merged["agent name_2"])
-
-# 📅 FINAL DATE
 merged["date"] = merged["date_1"].combine_first(merged["date_2"])
 
-# 📊 STATUS
+# STATUS
 merged["status"] = merged.apply(
     lambda x: "MATCHED" if pd.notna(x["agent name_1"]) and pd.notna(x["agent name_2"])
     else ("ONLY IN FILE 1" if pd.notna(x["agent name_1"]) else "ONLY IN FILE 2"),
     axis=1
 )
 
-# 🔁 DUPLICATES PER AGENT
+# DUPLICATES
 merged["duplicate_per_agent"] = merged.duplicated(
     subset=["agent name", "serial number"],
     keep=False
 )
 
-# 🧹 FINAL CLEAN
 final = merged[[
     "agent name",
     "serial number",
@@ -82,8 +77,36 @@ final = merged[[
     "duplicate_per_agent"
 ]]
 
-# 📁 SAVE OUTPUT
+# 📊 DASHBOARD CALCULATION
+dashboard = final.groupby("agent name").agg(
+    total_lines=("serial number", "count"),
+    duplicates=("duplicate_per_agent", "sum")
+).reset_index()
+
+# RANKING
+dashboard["performance_rank"] = dashboard["total_lines"].rank(
+    ascending=False,
+    method="dense"
+).astype(int)
+
+# 📁 SAVE EXCEL WITH FORMATTING
 os.makedirs("output", exist_ok=True)
-final.to_excel("output/result.xlsx", index=False)
+
+with pd.ExcelWriter("output/result.xlsx", engine="openpyxl") as writer:
+    final.to_excel(writer, index=False, sheet_name="Results")
+    dashboard.to_excel(writer, index=False, sheet_name="Dashboard")
+
+    workbook = writer.book
+    worksheet = writer.sheets["Results"]
+
+    # 🎨 HIGHLIGHT DUPLICATES IN RED
+    from openpyxl.styles import PatternFill
+
+    red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
+
+    for row in range(2, len(final) + 2):
+        if worksheet.cell(row=row, column=5).value:  # duplicate column
+            for col in range(1, 6):
+                worksheet.cell(row=row, column=col).fill = red_fill
 
 print("DONE")
