@@ -27,6 +27,7 @@ def extract_serials(df):
 
         val = str(val).strip()
 
+        # CLEAN AGENT NAME
         clean_name = re.sub(r'[^A-Za-z\s]', '', val).strip()
         clean_name = re.sub(r'\b(lines?|line)\b', '', clean_name, flags=re.IGNORECASE).strip()
 
@@ -34,27 +35,39 @@ def extract_serials(df):
             current_agent = clean_name
             continue
 
+        # SERIALS
         serials = re.findall(r'\d{10,}', val)
+
+        # VAN PLATE (Kenya format)
+        van_match = re.search(r'\bK[A-Z]{2}\s?\d{3}[A-Z]?\b', val.upper())
+        van_plate = van_match.group(0) if van_match else ""
 
         for s in serials:
             data.append({
                 "agent name": current_agent,
-                "serial number": s
+                "serial number": s,
+                "van plate": van_plate
             })
 
     return pd.DataFrame(data)
 
 
-# READ FILES
+# PROCESS FILES
 df1 = extract_serials(read_file(file1))
 df2 = extract_serials(read_file(file2))
 
-# CLEAN
 df1 = df1.drop_duplicates()
 df2 = df2.drop_duplicates()
 
 # MERGE
-merged = pd.merge(df1, df2, on="serial number", how="outer", indicator=True)
+merged = pd.merge(
+    df1,
+    df2,
+    on="serial number",
+    how="outer",
+    suffixes=("_file1", "_file2"),
+    indicator=True
+)
 
 # STATUS
 merged["status"] = merged["_merge"].map({
@@ -65,17 +78,40 @@ merged["status"] = merged["_merge"].map({
 
 merged.drop(columns=["_merge"], inplace=True)
 
-# FIX AGENT NAME (combine both sides)
-merged["agent name"] = merged["agent name_x"].fillna("") + merged["agent name_y"].fillna("")
-merged.drop(columns=["agent name_x", "agent name_y"], inplace=True)
+# COMBINE AGENT + VAN
+merged["agent name"] = merged["agent name_file1"].fillna("") + merged["agent name_file2"].fillna("")
+merged["van plate"] = merged["van plate_file1"].fillna("") + merged["van plate_file2"].fillna("")
+
+merged.drop(columns=[
+    "agent name_file1", "agent name_file2",
+    "van plate_file1", "van plate_file2"
+], inplace=True)
 
 # DUPLICATES
 merged["duplicate_per_agent"] = merged.duplicated(
     subset=["agent name", "serial number"], keep=False
 )
 
-# SAVE OUTPUT
+# ORDER
+merged = merged[[
+    "agent name",
+    "serial number",
+    "van plate",
+    "status",
+    "duplicate_per_agent"
+]]
+
+# SUMMARY
+summary = merged.groupby("agent name").agg(
+    total_serials=("serial number", "count"),
+    duplicates=("duplicate_per_agent", "sum")
+).reset_index()
+
+# SAVE EXCEL WITH FORMATTING
 os.makedirs("output", exist_ok=True)
-merged.to_excel("output/result.xlsx", index=False)
+
+with pd.ExcelWriter("output/result.xlsx", engine="openpyxl") as writer:
+    merged.to_excel(writer, index=False, sheet_name="Results")
+    summary.to_excel(writer, index=False, sheet_name="Summary")
 
 print("Processing complete. Download ready.")
