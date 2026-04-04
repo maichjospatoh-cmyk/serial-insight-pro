@@ -7,10 +7,9 @@ const fs = require('fs');
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
-// Serve static files (for logo if needed)
 app.use(express.static('.'));
 
-// Homepage
+// HOME
 app.get('/', (req, res) => {
     res.send(`
         <div style="text-align:center; margin-top:50px;">
@@ -32,19 +31,18 @@ app.get('/', (req, res) => {
     `);
 });
 
-// Process route
+// PROCESS
 app.post('/process', upload.array('files', 2), (req, res) => {
     const file1 = req.files[0].path;
     const file2 = req.files[1].path;
 
-    // ensure output folder exists
     if (!fs.existsSync('output')) {
         fs.mkdirSync('output');
     }
 
     exec(`python3 processor/compare.py ${file1} ${file2}`, (error, stdout, stderr) => {
         if (error) {
-            return res.send(`<pre>Processing error: ${stderr}</pre>`);
+            return res.send(`<pre>${stderr}</pre>`);
         }
 
         res.send(`
@@ -52,20 +50,19 @@ app.post('/process', upload.array('files', 2), (req, res) => {
                 <h2>Processing Complete ✅</h2>
 
                 <a href="/download">
-                    <button style="padding:10px 20px; background:green; color:white; border:none;">
+                    <button style="padding:10px 20px; background:green; color:white;">
                         Download Excel
                     </button>
                 </a>
 
                 <br><br>
-
                 <pre>${stdout}</pre>
             </div>
         `);
     });
 });
 
-// Download route
+// DOWNLOAD
 app.get('/download', (req, res) => {
     const filePath = path.join(__dirname, '..', 'output', 'result.xlsx');
 
@@ -76,7 +73,7 @@ app.get('/download', (req, res) => {
     res.download(filePath);
 });
 
-// Start server
+// START
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
