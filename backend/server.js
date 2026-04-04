@@ -8,7 +8,6 @@ const { authenticate } = require("./auth");
 
 const nodemailer = require("nodemailer");
 const xlsx = require("xlsx");
-const sqlite3 = require("sqlite3").verbose();
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
@@ -22,17 +21,13 @@ app.use(session({
   saveUninitialized: true
 }));
 
-// DATABASE
-const db = new sqlite3.Database("reports.db");
-db.run(`
-  CREATE TABLE IF NOT EXISTS reports (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    filename TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+// 📂 SIMPLE JSON DATABASE
+const HISTORY_FILE = "history.json";
+if (!fs.existsSync(HISTORY_FILE)) {
+  fs.writeFileSync(HISTORY_FILE, JSON.stringify([]));
+}
 
-// EMAIL FUNCTION
+// 📧 EMAIL FUNCTION
 function sendEmail() {
   const transporter = nodemailer.createTransport({
     service: "gmail",
@@ -56,7 +51,7 @@ function sendEmail() {
   });
 }
 
-// LOGIN
+// 🔐 LOGIN
 app.get("/login", (req, res) => {
   res.send(`
     <div style="text-align:center;margin-top:80px;font-family:Arial;">
@@ -98,7 +93,7 @@ app.get("/", (req, res) => {
   res.redirect("/home");
 });
 
-// HOME
+// 🏠 HOME
 app.get("/home", requireLogin, (req, res) => {
   res.send(`
     <div style="text-align:center;font-family:Arial;">
@@ -128,7 +123,7 @@ app.get("/home", requireLogin, (req, res) => {
   `);
 });
 
-// PROCESS
+// ⚙️ PROCESS
 app.post("/process", requireLogin, upload.array("files", 2), (req, res) => {
   const f1 = req.files[0].path;
   const f2 = req.files[1].path;
@@ -138,8 +133,15 @@ app.post("/process", requireLogin, upload.array("files", 2), (req, res) => {
   exec(`python3 processor/compare.py ${f1} ${f2}`, (err, stdout, stderr) => {
     if (err) return res.send(stderr);
 
-    db.run("INSERT INTO reports (filename) VALUES (?)", ["result.xlsx"]);
+    // SAVE HISTORY (JSON)
+    const history = JSON.parse(fs.readFileSync(HISTORY_FILE));
+    history.push({
+      file: "result.xlsx",
+      date: new Date().toISOString()
+    });
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
 
+    // SEND EMAIL
     sendEmail();
 
     res.send(`
@@ -152,7 +154,7 @@ app.post("/process", requireLogin, upload.array("files", 2), (req, res) => {
   });
 });
 
-// DOWNLOAD
+// 📥 DOWNLOAD
 app.get("/download", requireLogin, (req, res) => {
   const file = path.join(__dirname, "..", "output", "result.xlsx");
   if (!fs.existsSync(file)) return res.send("No file");
@@ -160,7 +162,7 @@ app.get("/download", requireLogin, (req, res) => {
   res.download(file);
 });
 
-// DASHBOARD (LIVE DATA)
+// 📊 DASHBOARD (LIVE)
 app.get("/dashboard", requireLogin, (req, res) => {
   const file = path.join(__dirname, "..", "output", "result.xlsx");
 
@@ -198,18 +200,19 @@ app.get("/dashboard", requireLogin, (req, res) => {
   `);
 });
 
-// HISTORY
+// 📜 HISTORY
 app.get("/history", requireLogin, (req, res) => {
-  db.all("SELECT * FROM reports ORDER BY created_at DESC", [], (e, rows) => {
-    let html = "<h2>History</h2><ul>";
+  const history = JSON.parse(fs.readFileSync(HISTORY_FILE));
 
-    rows.forEach(r => {
-      html += `<li>${r.filename} - ${r.created_at}</li>`;
-    });
+  let html = "<h2>History</h2><ul>";
 
-    html += "</ul><a href='/home'>Back</a>";
-    res.send(html);
+  history.forEach(h => {
+    html += `<li>${h.file} - ${h.date}</li>`;
   });
+
+  html += "</ul><a href='/home'>Back</a>";
+
+  res.send(html);
 });
 
 const PORT = process.env.PORT || 10000;
