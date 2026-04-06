@@ -1,4 +1,4 @@
-console.log("FORCED LOGIN SYSTEM ✅");
+console.log("HARD LOGIN ENFORCED ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -18,7 +18,7 @@ app.use(express.static("."));
 app.use(session({
   secret: "secret-key",
   resave: false,
-  saveUninitialized: true
+  saveUninitialized: false
 }));
 
 const USERS_FILE = "users.json";
@@ -34,28 +34,28 @@ if (!fs.existsSync(USERS_FILE)) {
 // HELPERS
 const getUsers = () => JSON.parse(fs.readFileSync(USERS_FILE));
 
-// 🎨 SIMPLE UI
+// 🎨 UI
 function page(content){
 return `
 <html>
-<head>
-<style>
-body{font-family:Arial;text-align:center;margin-top:80px;background:#f4f6f8}
-.card{background:white;padding:20px;width:350px;margin:auto;border-radius:10px}
-button{background:green;color:white;padding:10px;border:none}
-</style>
-</head>
-<body>
+<body style="text-align:center;font-family:Arial;margin-top:80px">
 <img src="/logo.jpeg" width="100"><br><br>
-<div class="card">${content}</div>
+${content}
 </body>
 </html>`;
 }
 
-// 🔴 FORCE LOGIN EVERY TIME
-app.get("/", (req, res) => {
-  req.session.destroy(); // clears session ALWAYS
-  res.redirect("/login");
+// 🔥 GLOBAL AUTH MIDDLEWARE (THIS IS THE REAL FIX)
+app.use((req, res, next) => {
+  const openRoutes = ["/login"];
+
+  if (openRoutes.includes(req.path)) return next();
+
+  if (!req.session.user) {
+    return res.redirect("/login");
+  }
+
+  next();
 });
 
 // LOGIN PAGE
@@ -63,14 +63,14 @@ app.get("/login", (req, res) => {
   res.send(page(`
     <h2>Login</h2>
     <form method="post">
-      <input name="username" placeholder="Username"><br><br>
-      <input name="password" type="password" placeholder="Password"><br><br>
+      <input name="username"><br><br>
+      <input type="password" name="password"><br><br>
       <button>Login</button>
     </form>
   `));
 });
 
-// LOGIN LOGIC
+// LOGIN
 app.post("/login", async (req, res) => {
   const user = getUsers().find(u => u.username === req.body.username);
 
@@ -84,14 +84,8 @@ app.post("/login", async (req, res) => {
   res.redirect("/home");
 });
 
-// AUTH
-function auth(req, res, next) {
-  if (!req.session.user) return res.redirect("/login");
-  next();
-}
-
-// HOME (UPLOAD)
-app.get("/home", auth, (req, res) => {
+// HOME
+app.get("/home", (req, res) => {
   res.send(page(`
     <h2>Upload Files</h2>
     <form action="/process" method="post" enctype="multipart/form-data">
@@ -99,7 +93,6 @@ app.get("/home", auth, (req, res) => {
       <input type="file" name="files"><br><br>
       <button>Process</button>
     </form>
-
     <br>
     <a href="/dashboard">Dashboard</a> |
     <a href="/logout">Logout</a>
@@ -107,51 +100,52 @@ app.get("/home", auth, (req, res) => {
 });
 
 // PROCESS
-app.post("/process", auth, upload.array("files", 2), (req, res) => {
+app.post("/process", upload.array("files", 2), (req, res) => {
   exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`, () => {
     res.send(page(`
       <h2>Done ✅</h2>
-      <a href="/download">Download Excel</a>
+      <a href="/download">Download</a>
     `));
   });
 });
 
 // DOWNLOAD
-app.get("/download", auth, (req, res) => {
+app.get("/download", (req, res) => {
   const file = path.join(__dirname, "output", "result.xlsx");
   if (!fs.existsSync(file)) return res.send("No file");
   res.download(file);
 });
 
 // DASHBOARD
-app.get("/dashboard", auth, (req, res) => {
+app.get("/dashboard", (req, res) => {
   const file = "output/result.xlsx";
+  if (!fs.existsSync(file)) return res.send("No data");
 
-  if (!fs.existsSync(file)) {
-    return res.send(page("<h3>No data yet</h3>"));
-  }
-
-  const wb = xlsx.readFile(file);
-  const data = xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+  const data = xlsx.utils.sheet_to_json(xlsx.readFile(file).Sheets["Results"]);
 
   const map = {};
-  data.forEach(r => {
-    const a = r["agent name"] || "Unknown";
-    map[a] = (map[a] || 0) + 1;
+  data.forEach(r=>{
+    const a=r["agent name"]||"Unknown";
+    map[a]=(map[a]||0)+1;
   });
 
   res.send(page(`
     <h2>Dashboard</h2>
-    <pre>${JSON.stringify(map, null, 2)}</pre>
+    <pre>${JSON.stringify(map,null,2)}</pre>
     <br><a href="/home">Back</a>
   `));
 });
 
 // LOGOUT
 app.get("/logout", (req, res) => {
-  req.session.destroy();
+  req.session.destroy(() => {
+    res.redirect("/login");
+  });
+});
+
+// ROOT
+app.get("/", (req, res) => {
   res.redirect("/login");
 });
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Server running"));
+app.listen(process.env.PORT || 10000, () => console.log("Server running"));
