@@ -1,11 +1,10 @@
-console.log("NEW SERVER RUNNING ✅");
-
 const express = require("express");
 const multer = require("multer");
 const { exec } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const session = require("express-session");
+const xlsx = require("xlsx");
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
@@ -21,113 +20,75 @@ app.use(session({
 
 const USERS_FILE = "users.json";
 
-// 📥 LOAD USERS
 function getUsers() {
   return JSON.parse(fs.readFileSync(USERS_FILE));
 }
 
-// 💾 SAVE USERS
 function saveUsers(users) {
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 }
 
-// 🔐 LOGIN PAGE
+// LOGIN PAGE
 app.get("/login", (req, res) => {
   res.send(`
-    <div style="text-align:center;margin-top:100px;font-family:Arial;">
+    <div style="text-align:center;margin-top:80px;">
       <img src="/logo.jpeg" width="120"/>
-      <h2 style="color:green;">LOC 7 Communications</h2>
-
+      <h2>Login</h2>
       <form method="post">
-        <input name="username" placeholder="Username"><br><br>
-        <input name="password" type="password" placeholder="Password"><br><br>
+        <input name="username"><br><br>
+        <input name="password" type="password"><br><br>
         <button>Login</button>
       </form>
     </div>
   `);
 });
 
-// 🔐 LOGIN LOGIC
+// LOGIN
 app.post("/login", (req, res) => {
   const users = getUsers();
-
   const user = users.find(
     u => u.username === req.body.username && u.password === req.body.password
   );
 
   if (!user) return res.send("Invalid login");
 
-  req.session.user = user.username;
+  req.session.user = user;
   res.redirect("/home");
 });
 
-// 🔒 AUTH
+// AUTH
 function requireLogin(req, res, next) {
   if (!req.session.user) return res.redirect("/login");
   next();
 }
 
-// 🏠 HOME
+// HOME
 app.get("/home", requireLogin, (req, res) => {
+  const user = req.session.user;
+
   res.send(`
-    <div style="text-align:center;font-family:Arial;">
-      <img src="/logo.jpeg" width="120"/>
-      <h2>Welcome ${req.session.user}</h2>
+    <h2>Welcome ${user.username} (${user.role})</h2>
 
-      <form action="/process" method="post" enctype="multipart/form-data">
-        <input type="file" name="files" required><br><br>
-        <input type="file" name="files" required><br><br>
-        <button>Process</button>
-      </form>
+    <form action="/process" method="post" enctype="multipart/form-data">
+      <input type="file" name="files" required><br><br>
+      <input type="file" name="files" required><br><br>
+      <button>Process</button>
+    </form>
 
-      <br>
-      <a href="/change-password">Change Password</a> |
-      <a href="/logout">Logout</a>
-    </div>
+    <br>
+    ${user.role === "admin" ? '<a href="/manage-users">Manage Users</a> |' : ""}
+    <a href="/dashboard">Dashboard</a> |
+    <a href="/logout">Logout</a>
   `);
 });
 
-// 🔑 CHANGE PASSWORD PAGE
-app.get("/change-password", requireLogin, (req, res) => {
-  res.send(`
-    <div style="text-align:center;margin-top:100px;">
-      <h2>Change Password</h2>
-
-      <form method="post">
-        <input name="oldPassword" type="password" placeholder="Old Password"><br><br>
-        <input name="newPassword" type="password" placeholder="New Password"><br><br>
-        <button>Update</button>
-      </form>
-    </div>
-  `);
-});
-
-// 🔑 CHANGE PASSWORD LOGIC
-app.post("/change-password", requireLogin, (req, res) => {
-  const users = getUsers();
-
-  const userIndex = users.findIndex(u => u.username === req.session.user);
-
-  if (users[userIndex].password !== req.body.oldPassword) {
-    return res.send("Old password incorrect ❌");
-  }
-
-  users[userIndex].password = req.body.newPassword;
-  saveUsers(users);
-
-  res.send(`
-    <h2>Password Updated ✅</h2>
-    <a href="/home">Back</a>
-  `);
-});
-
-// 🔓 LOGOUT
+// LOGOUT
 app.get("/logout", (req, res) => {
   req.session.destroy();
   res.redirect("/login");
 });
 
-// ⚙️ PROCESS
+// PROCESS
 app.post("/process", requireLogin, upload.array("files", 2), (req, res) => {
   const f1 = req.files[0].path;
   const f2 = req.files[1].path;
@@ -139,20 +100,92 @@ app.post("/process", requireLogin, upload.array("files", 2), (req, res) => {
 
     res.send(`
       <h2>Done ✅</h2>
-      <a href="/download">Download Excel</a><br><br>
-      <a href="/home">Back</a>
+      <a href="/download">Download</a>
     `);
   });
 });
 
-// 📥 DOWNLOAD
+// DOWNLOAD
 app.get("/download", requireLogin, (req, res) => {
   const file = path.join(__dirname, "output", "result.xlsx");
-
-  if (!fs.existsSync(file)) return res.send("File not found");
-
+  if (!fs.existsSync(file)) return res.send("No file");
   res.download(file);
 });
 
+// DASHBOARD (ROLE BASED)
+app.get("/dashboard", requireLogin, (req, res) => {
+  const file = path.join(__dirname, "output", "result.xlsx");
+  if (!fs.existsSync(file)) return res.send("No data");
+
+  const wb = xlsx.readFile(file);
+  const data = xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+
+  const user = req.session.user;
+
+  let filtered = data;
+
+  if (user.role === "agent") {
+    filtered = data.filter(r => r["agent name"] === user.username);
+  }
+
+  const map = {};
+  filtered.forEach(r => {
+    const a = r["agent name"];
+    map[a] = (map[a] || 0) + 1;
+  });
+
+  res.send(`
+    <h2>Dashboard</h2>
+    <pre>${JSON.stringify(map, null, 2)}</pre>
+    <a href="/home">Back</a>
+  `);
+});
+
+// ADMIN: MANAGE USERS
+app.get("/manage-users", requireLogin, (req, res) => {
+  if (req.session.user.role !== "admin") return res.send("Access denied");
+
+  const users = getUsers();
+
+  let html = "<h2>Users</h2><ul>";
+  users.forEach(u => {
+    html += `<li>${u.username} (${u.role})</li>`;
+  });
+  html += "</ul>";
+
+  html += `
+    <h3>Add User</h3>
+    <form method="post">
+      <input name="username" placeholder="Username"><br><br>
+      <input name="password" placeholder="Password"><br><br>
+      <select name="role">
+        <option value="agent">Agent</option>
+        <option value="admin">Admin</option>
+      </select><br><br>
+      <button>Add</button>
+    </form>
+    <a href="/home">Back</a>
+  `;
+
+  res.send(html);
+});
+
+// ADD USER
+app.post("/manage-users", requireLogin, (req, res) => {
+  if (req.session.user.role !== "admin") return res.send("Access denied");
+
+  const users = getUsers();
+
+  users.push({
+    username: req.body.username,
+    password: req.body.password,
+    role: req.body.role
+  });
+
+  saveUsers(users);
+
+  res.redirect("/manage-users");
+});
+
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Server running"));
+app.listen(PORT, () => console.log("Running"));
