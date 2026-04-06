@@ -1,4 +1,4 @@
-console.log("LOGIN-FIRST SYSTEM ✅");
+console.log("FORCED LOGIN SYSTEM ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -38,16 +38,24 @@ const getUsers = () => JSON.parse(fs.readFileSync(USERS_FILE));
 function page(content){
 return `
 <html>
-<body style="text-align:center;font-family:Arial;margin-top:80px">
+<head>
+<style>
+body{font-family:Arial;text-align:center;margin-top:80px;background:#f4f6f8}
+.card{background:white;padding:20px;width:350px;margin:auto;border-radius:10px}
+button{background:green;color:white;padding:10px;border:none}
+</style>
+</head>
+<body>
 <img src="/logo.jpeg" width="100"><br><br>
-${content}
+<div class="card">${content}</div>
 </body>
 </html>`;
 }
 
-// 🔴 FORCE LOGIN PAGE AS HOME
+// 🔴 FORCE LOGIN EVERY TIME
 app.get("/", (req, res) => {
-  res.redirect("/login"); // ALWAYS login first
+  req.session.destroy(); // clears session ALWAYS
+  res.redirect("/login");
 });
 
 // LOGIN PAGE
@@ -55,8 +63,8 @@ app.get("/login", (req, res) => {
   res.send(page(`
     <h2>Login</h2>
     <form method="post">
-      <input name="username"><br><br>
-      <input name="password" type="password"><br><br>
+      <input name="username" placeholder="Username"><br><br>
+      <input name="password" type="password" placeholder="Password"><br><br>
       <button>Login</button>
     </form>
   `));
@@ -73,10 +81,10 @@ app.post("/login", async (req, res) => {
 
   req.session.user = user;
 
-  res.redirect("/home"); // ONLY after login
+  res.redirect("/home");
 });
 
-// 🔒 AUTH
+// AUTH
 function auth(req, res, next) {
   if (!req.session.user) return res.redirect("/login");
   next();
@@ -91,6 +99,7 @@ app.get("/home", auth, (req, res) => {
       <input type="file" name="files"><br><br>
       <button>Process</button>
     </form>
+
     <br>
     <a href="/dashboard">Dashboard</a> |
     <a href="/logout">Logout</a>
@@ -102,7 +111,7 @@ app.post("/process", auth, upload.array("files", 2), (req, res) => {
   exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`, () => {
     res.send(page(`
       <h2>Done ✅</h2>
-      <a href="/download">Download</a>
+      <a href="/download">Download Excel</a>
     `));
   });
 });
@@ -117,19 +126,23 @@ app.get("/download", auth, (req, res) => {
 // DASHBOARD
 app.get("/dashboard", auth, (req, res) => {
   const file = "output/result.xlsx";
-  if (!fs.existsSync(file)) return res.send("No data");
 
-  const data = xlsx.utils.sheet_to_json(xlsx.readFile(file).Sheets["Results"]);
+  if (!fs.existsSync(file)) {
+    return res.send(page("<h3>No data yet</h3>"));
+  }
+
+  const wb = xlsx.readFile(file);
+  const data = xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
 
   const map = {};
-  data.forEach(r=>{
-    const a=r["agent name"]||"Unknown";
-    map[a]=(map[a]||0)+1;
+  data.forEach(r => {
+    const a = r["agent name"] || "Unknown";
+    map[a] = (map[a] || 0) + 1;
   });
 
   res.send(page(`
     <h2>Dashboard</h2>
-    <pre>${JSON.stringify(map,null,2)}</pre>
+    <pre>${JSON.stringify(map, null, 2)}</pre>
     <br><a href="/home">Back</a>
   `));
 });
@@ -140,4 +153,5 @@ app.get("/logout", (req, res) => {
   res.redirect("/login");
 });
 
-app.listen(process.env.PORT || 10000, () => console.log("Running"));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log("Server running"));
