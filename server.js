@@ -1,4 +1,4 @@
-console.log("HARD LOGIN ENFORCED ✅");
+console.log("ABSOLUTE LOGIN FIX ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -23,7 +23,7 @@ app.use(session({
 
 const USERS_FILE = "users.json";
 
-// CREATE DEFAULT USER
+// DEFAULT USER
 if (!fs.existsSync(USERS_FILE)) {
   const hashed = bcrypt.hashSync("admin123", 10);
   fs.writeFileSync(USERS_FILE, JSON.stringify([
@@ -31,10 +31,9 @@ if (!fs.existsSync(USERS_FILE)) {
   ], null, 2));
 }
 
-// HELPERS
 const getUsers = () => JSON.parse(fs.readFileSync(USERS_FILE));
 
-// 🎨 UI
+// UI
 function page(content){
 return `
 <html>
@@ -45,17 +44,27 @@ ${content}
 </html>`;
 }
 
-// 🔥 GLOBAL AUTH MIDDLEWARE (THIS IS THE REAL FIX)
+// 🔥 GLOBAL BLOCK (ALL ROUTES)
 app.use((req, res, next) => {
-  const openRoutes = ["/login"];
 
-  if (openRoutes.includes(req.path)) return next();
+  // Allow only login routes
+  if (req.path === "/login" || req.path === "/favicon.ico") {
+    return next();
+  }
 
+  // If NOT logged in → FORCE LOGIN
   if (!req.session.user) {
     return res.redirect("/login");
   }
 
   next();
+});
+
+// ROOT → FORCE LOGIN ALWAYS
+app.get("/", (req, res) => {
+  req.session.destroy(() => {
+    res.redirect("/login");
+  });
 });
 
 // LOGIN PAGE
@@ -84,8 +93,13 @@ app.post("/login", async (req, res) => {
   res.redirect("/home");
 });
 
-// HOME
+// 🔴 HOME (DOUBLE CHECK PROTECTION)
 app.get("/home", (req, res) => {
+
+  if (!req.session.user) {
+    return res.redirect("/login");
+  }
+
   res.send(page(`
     <h2>Upload Files</h2>
     <form action="/process" method="post" enctype="multipart/form-data">
@@ -93,6 +107,7 @@ app.get("/home", (req, res) => {
       <input type="file" name="files"><br><br>
       <button>Process</button>
     </form>
+
     <br>
     <a href="/dashboard">Dashboard</a> |
     <a href="/logout">Logout</a>
@@ -102,10 +117,7 @@ app.get("/home", (req, res) => {
 // PROCESS
 app.post("/process", upload.array("files", 2), (req, res) => {
   exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`, () => {
-    res.send(page(`
-      <h2>Done ✅</h2>
-      <a href="/download">Download</a>
-    `));
+    res.send(page(`<h2>Done ✅</h2><a href="/download">Download</a>`));
   });
 });
 
@@ -141,11 +153,6 @@ app.get("/logout", (req, res) => {
   req.session.destroy(() => {
     res.redirect("/login");
   });
-});
-
-// ROOT
-app.get("/", (req, res) => {
-  res.redirect("/login");
 });
 
 app.listen(process.env.PORT || 10000, () => console.log("Server running"));
