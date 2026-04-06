@@ -1,15 +1,7 @@
-{
-  "name": "serial-insight-pro",
-  "version": "1.0.0",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "multer": "^1.4.5-lts.1",
-    "express-session": "^1.17.3",
-    "xlsx": "^0.18.5",
-    "bcryptjs": "^2.4.3"
+[
+  {
+    "username": "admin",
+    "password": "$2a$10$7aQd7KXQ0l7r6Jm7G6kY4eQhZl2zYkYF7q9GzY3Wz8QYpJZyQXx7K",
+    "role": "admin"
   }
-}
+]
