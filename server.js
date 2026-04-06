@@ -1,4 +1,4 @@
-console.log("FINAL CLEAN BUILD RUNNING ✅");
+console.log("LOGIN SYSTEM FIXED ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -6,7 +6,7 @@ const { exec } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const session = require("express-session");
-const bcrypt = require("bcryptjs"); // ✅ ONLY THIS (NO bcrypt)
+const bcrypt = require("bcryptjs");
 const xlsx = require("xlsx");
 
 const app = express();
@@ -23,16 +23,12 @@ app.use(session({
 
 const USERS_FILE = "users.json";
 
-// ✅ CREATE DEFAULT USER
+// ✅ ALWAYS CREATE DEFAULT USER IF FILE MISSING
 if (!fs.existsSync(USERS_FILE)) {
   const hashed = bcrypt.hashSync("admin123", 10);
 
   fs.writeFileSync(USERS_FILE, JSON.stringify([
-    {
-      username: "admin",
-      password: hashed,
-      role: "admin"
-    }
+    { username: "admin", password: hashed, role: "admin" }
   ], null, 2));
 }
 
@@ -45,7 +41,13 @@ function saveUsers(users) {
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 }
 
-// LOGIN PAGE
+// 🔴 ROOT → ALWAYS LOGIN FIRST
+app.get("/", (req, res) => {
+  if (!req.session.user) return res.redirect("/login");
+  res.redirect("/home");
+});
+
+// 🔐 LOGIN PAGE
 app.get("/login", (req, res) => {
   res.send(`
     <div style="text-align:center;margin-top:80px;">
@@ -60,7 +62,7 @@ app.get("/login", (req, res) => {
   `);
 });
 
-// LOGIN
+// 🔐 LOGIN LOGIC
 app.post("/login", async (req, res) => {
   const users = getUsers();
   const user = users.find(u => u.username === req.body.username);
@@ -74,19 +76,13 @@ app.post("/login", async (req, res) => {
   res.redirect("/home");
 });
 
-// AUTH
+// 🔒 AUTH
 function requireLogin(req, res, next) {
   if (!req.session.user) return res.redirect("/login");
   next();
 }
 
-// ROOT
-app.get("/", (req, res) => {
-  if (!req.session.user) return res.redirect("/login");
-  res.redirect("/home");
-});
-
-// HOME
+// 🏠 HOME (UPLOAD PAGE AFTER LOGIN)
 app.get("/home", requireLogin, (req, res) => {
   res.send(`
     <h2>Welcome ${req.session.user.username}</h2>
@@ -104,7 +100,7 @@ app.get("/home", requireLogin, (req, res) => {
   `);
 });
 
-// CHANGE PASSWORD
+// 🔑 CHANGE PASSWORD
 app.get("/change-password", requireLogin, (req, res) => {
   res.send(`
     <h2>Change Password</h2>
@@ -129,13 +125,13 @@ app.post("/change-password", requireLogin, async (req, res) => {
   res.send("Password updated ✅ <br><a href='/home'>Back</a>");
 });
 
-// LOGOUT
+// 🚪 LOGOUT
 app.get("/logout", (req, res) => {
   req.session.destroy();
   res.redirect("/login");
 });
 
-// PROCESS FILES
+// ⚙️ PROCESS
 app.post("/process", requireLogin, upload.array("files", 2), (req, res) => {
   const f1 = req.files[0].path;
   const f2 = req.files[1].path;
@@ -153,7 +149,7 @@ app.post("/process", requireLogin, upload.array("files", 2), (req, res) => {
   });
 });
 
-// DOWNLOAD
+// 📥 DOWNLOAD
 app.get("/download", requireLogin, (req, res) => {
   const file = path.join(__dirname, "output", "result.xlsx");
 
@@ -162,7 +158,7 @@ app.get("/download", requireLogin, (req, res) => {
   res.download(file);
 });
 
-// DASHBOARD
+// 📊 DASHBOARD
 app.get("/dashboard", requireLogin, (req, res) => {
   const file = path.join(__dirname, "output", "result.xlsx");
 
