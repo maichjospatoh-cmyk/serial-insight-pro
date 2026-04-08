@@ -1,4 +1,4 @@
-console.log("FINAL ENTERPRISE SYSTEM + PASSWORD + DOWNLOAD FIX ✅");
+console.log("ENTERPRISE SYSTEM WITH EMAIL ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -8,6 +8,7 @@ const path = require("path");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const xlsx = require("xlsx");
+const nodemailer = require("nodemailer");
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
@@ -21,9 +22,23 @@ app.use(session({
   saveUninitialized: false
 }));
 
+// 🔐 EMAIL CONFIG (CHANGE THIS)
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "your-email@gmail.com",
+    pass: "your-app-password"
+  }
+});
+
+// 👇 MAP YOUR AGENTS HERE
+const agentEmails = {
+  "Agent1": "agent1@gmail.com",
+  "Agent2": "agent2@gmail.com"
+};
+
 const USERS_FILE = "users.json";
 
-// CREATE DEFAULT USER
 if (!fs.existsSync(USERS_FILE)) {
   const hashed = bcrypt.hashSync("admin123", 10);
   fs.writeFileSync(USERS_FILE, JSON.stringify([
@@ -34,7 +49,7 @@ if (!fs.existsSync(USERS_FILE)) {
 const getUsers = () => JSON.parse(fs.readFileSync(USERS_FILE));
 const saveUsers = (u) => fs.writeFileSync(USERS_FILE, JSON.stringify(u, null, 2));
 
-// 🎨 UI TEMPLATE
+// 🎨 UI
 function page(content){
 return `
 <html>
@@ -43,250 +58,177 @@ return `
 body{
   margin:0;
   font-family:Arial;
-  background: linear-gradient(135deg, #0f7a2f, #28a745, #0f7a2f);
-  height:100vh;
+  background: linear-gradient(135deg,#0f7a2f,#28a745,#0f7a2f);
   display:flex;
   align-items:center;
   justify-content:center;
+  height:100vh;
 }
-
 .card{
   background:white;
   padding:40px;
   width:500px;
   border-radius:14px;
-  box-shadow:0 12px 30px rgba(0,0,0,0.25);
   text-align:center;
 }
-
-.logo{ width:150px; margin-bottom:20px; }
-
-input{
-  width:95%;
-  padding:12px;
-  margin:10px 0;
-  border-radius:6px;
-  border:1px solid #ccc;
-}
-
-button{
-  background:#0f7a2f;
-  color:white;
-  padding:12px 25px;
-  border:none;
-  border-radius:6px;
-  font-weight:bold;
-  cursor:pointer;
-}
-
-.nav a{
-  font-size:18px;
-  margin:0 10px;
-  color:#0f7a2f;
-  font-weight:bold;
-  text-decoration:none;
-}
-
-.nav a:hover{
-  background:#e6f5ea;
-  padding:6px;
-  border-radius:6px;
-}
-
-.download-btn{
-  display:inline-block;
-  margin-top:15px;
-  padding:12px 20px;
-  background:#0f7a2f;
-  color:white;
-  border-radius:6px;
-  text-decoration:none;
-  font-weight:bold;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:15px;
-}
-
-th,td{
-  padding:10px;
-  border:1px solid #ddd;
-}
-
-th{
-  background:#0f7a2f;
-  color:white;
-}
+.logo{width:150px;margin-bottom:20px;}
+input{width:95%;padding:12px;margin:10px 0;}
+button{background:#0f7a2f;color:white;padding:12px;border:none;}
+.nav a{font-size:18px;margin:0 10px;color:#0f7a2f;font-weight:bold;text-decoration:none;}
+.download-btn{display:inline-block;margin-top:10px;padding:10px;background:#0f7a2f;color:white;}
 </style>
 </head>
-
 <body>
-
 <div class="card">
 <img src="/assets/logo.jpeg" class="logo"/>
 ${content}
 </div>
-
 </body>
 </html>`;
 }
 
-// 🔐 AUTH
-app.use((req, res, next) => {
-  if (req.path === "/login") return next();
-  if (!req.session.user) return res.redirect("/login");
+// AUTH
+app.use((req,res,next)=>{
+  if(req.path==="/login") return next();
+  if(!req.session.user) return res.redirect("/login");
   next();
 });
 
-// ROOT
-app.get("/", (req, res) => res.redirect("/login"));
-
 // LOGIN
-app.get("/login", (req, res) => {
-  res.send(page(`
-    <h2>Login</h2>
-    <form method="post">
-      <input name="username">
-      <input name="password" type="password">
-      <button>Login</button>
-    </form>
-  `));
-});
+app.get("/login",(req,res)=>res.send(page(`
+<h2>Login</h2>
+<form method="post">
+<input name="username">
+<input name="password" type="password">
+<button>Login</button>
+</form>
+`)));
 
-app.post("/login", async (req, res) => {
-  const users = getUsers();
-  const user = users.find(u => u.username === req.body.username);
+app.post("/login",async(req,res)=>{
+const user=getUsers().find(u=>u.username===req.body.username);
+if(!user) return res.send(page("Invalid"));
 
-  if (!user) return res.send(page("Invalid login"));
+if(!(await bcrypt.compare(req.body.password,user.password))) return res.send(page("Invalid"));
 
-  const ok = await bcrypt.compare(req.body.password, user.password);
-  if (!ok) return res.send(page("Invalid login"));
-
-  req.session.user = user;
-  res.redirect("/home");
+req.session.user=user;
+res.redirect("/home");
 });
 
 // HOME
-app.get("/home", (req, res) => {
-  res.send(page(`
-    <h2>Upload Reports</h2>
+app.get("/home",(req,res)=>res.send(page(`
+<h2>Upload Reports</h2>
+<form action="/process" method="post" enctype="multipart/form-data">
+<input type="file" name="files">
+<input type="file" name="files">
+<button>Process</button>
+</form>
 
-    <form action="/process" method="post" enctype="multipart/form-data">
-      <input type="file" name="files" required>
-      <input type="file" name="files" required>
-      <button>Process</button>
-    </form>
+<div class="nav">
+<a href="/dashboard">Dashboard</a>
+<a href="/change-password">Password</a>
+<a href="/logout">Logout</a>
+</div>
+`)));
 
-    <div class="nav">
-      <a href="/dashboard">Dashboard</a>
-      <a href="/change-password">Change Password</a>
-      <a href="/logout">Logout</a>
-    </div>
-  `));
+// 🔥 PROCESS + EMAIL
+app.post("/process",upload.array("files",2),(req,res)=>{
+exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`,async()=>{
+
+const file="output/result.xlsx";
+const wb=xlsx.readFile(file);
+const data=xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+
+const agentMap={};
+
+data.forEach(r=>{
+const a=r["agent name"]||"Unknown";
+if(!agentMap[a]) agentMap[a]={total:0,duplicates:0};
+agentMap[a].total++;
+if(r["duplicate_per_agent"]) agentMap[a].duplicates++;
 });
 
-// PROCESS (FIXED DOWNLOAD BUTTON)
-app.post("/process", upload.array("files", 2), (req, res) => {
-  exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`, () => {
-    res.send(page(`
-      <h2>Processing Complete ✅</h2>
+// SEND EMAILS
+for(const agent in agentMap){
+if(!agentEmails[agent]) continue;
 
-      <a href="/download" class="download-btn">⬇ Download Excel</a>
+const info=agentMap[agent];
 
-      <div class="nav">
-        <a href="/home">Back</a>
-      </div>
-    `));
-  });
+await transporter.sendMail({
+from:"your-email@gmail.com",
+to:agentEmails[agent],
+subject:"Performance Report",
+text:`Agent: ${agent}
+
+Total Lines: ${info.total}
+Duplicates: ${info.duplicates}`
+});
+}
+
+res.send(page(`
+<h2>Processed & Emails Sent ✅</h2>
+<a href="/download" class="download-btn">Download Excel</a>
+`));
+
+});
 });
 
 // DOWNLOAD
-app.get("/download", (req, res) => {
-  const file = path.join(__dirname, "output", "result.xlsx");
-
-  if (!fs.existsSync(file)) {
-    return res.send(page("<h3>No file available</h3>"));
-  }
-
-  res.download(file);
+app.get("/download",(req,res)=>{
+const file=path.join(__dirname,"output","result.xlsx");
+if(!fs.existsSync(file)) return res.send(page("No file"));
+res.download(file);
 });
 
 // DASHBOARD
-app.get("/dashboard", (req, res) => {
-  const file = "output/result.xlsx";
+app.get("/dashboard",(req,res)=>{
+const file="output/result.xlsx";
+if(!fs.existsSync(file)) return res.send(page("No data"));
 
-  if (!fs.existsSync(file)) {
-    return res.send(page("<h3>No data yet</h3>"));
-  }
+const data=xlsx.utils.sheet_to_json(xlsx.readFile(file).Sheets[xlsx.readFile(file).SheetNames[0]]);
 
-  const data = xlsx.utils.sheet_to_json(
-    xlsx.readFile(file).Sheets[xlsx.readFile(file).SheetNames[0]]
-  );
-
-  const total = data.length;
-  const duplicates = data.filter(r => r["duplicate_per_agent"]).length;
-
-  const map = {};
-  data.forEach(r => {
-    const a = r["agent name"] || "Unknown";
-    map[a] = (map[a] || 0) + 1;
-  });
-
-  const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]);
-
-  res.send(page(`
-    <h2>Dashboard</h2>
-
-    <p>Total: ${total} | Duplicates: ${duplicates}</p>
-
-    <table>
-      <tr><th>Agent</th><th>Lines</th></tr>
-      ${sorted.map(a=>`<tr><td>${a[0]}</td><td>${a[1]}</td></tr>`).join("")}
-    </table>
-
-    <div class="nav">
-      <a href="/home">Upload</a>
-      <a href="/change-password">Change Password</a>
-      <a href="/logout">Logout</a>
-    </div>
-  `));
+const map={};
+data.forEach(r=>{
+const a=r["agent name"]||"Unknown";
+map[a]=(map[a]||0)+1;
 });
 
-// 🔑 CHANGE PASSWORD
-app.get("/change-password", (req, res) => {
-  res.send(page(`
-    <h2>Change Password</h2>
-    <form method="post">
-      <input name="oldPassword" type="password" placeholder="Old Password">
-      <input name="newPassword" type="password" placeholder="New Password">
-      <button>Update</button>
-    </form>
+res.send(page(`
+<h2>Dashboard</h2>
+<pre>${JSON.stringify(map,null,2)}</pre>
 
-    <div class="nav">
-      <a href="/home">Back</a>
-    </div>
-  `));
+<div class="nav">
+<a href="/home">Upload</a>
+<a href="/logout">Logout</a>
+</div>
+`));
 });
 
-app.post("/change-password", async (req, res) => {
-  const users = getUsers();
-  const index = users.findIndex(u => u.username === req.session.user.username);
+// CHANGE PASSWORD
+app.get("/change-password",(req,res)=>res.send(page(`
+<h2>Change Password</h2>
+<form method="post">
+<input name="oldPassword" type="password">
+<input name="newPassword" type="password">
+<button>Update</button>
+</form>
+`)));
 
-  const match = await bcrypt.compare(req.body.oldPassword, users[index].password);
+app.post("/change-password",async(req,res)=>{
+const users=getUsers();
+const i=users.findIndex(u=>u.username===req.session.user.username);
 
-  if (!match) return res.send(page("Wrong password"));
+const match=await bcrypt.compare(req.body.oldPassword,users[i].password);
+if(!match) return res.send(page("Wrong password"));
 
-  users[index].password = await bcrypt.hash(req.body.newPassword, 10);
-  saveUsers(users);
+users[i].password=await bcrypt.hash(req.body.newPassword,10);
+saveUsers(users);
 
-  res.send(page("<h3>Password Updated ✅</h3><a href='/home'>Back</a>"));
+res.send(page("Updated"));
 });
 
 // LOGOUT
-app.get("/logout", (req, res) => {
-  req.session.destroy(() => res.redirect("/login"));
+app.get("/logout",(req,res)=>{
+req.session.destroy(()=>res.redirect("/login"));
 });
 
-app.listen(process.env.PORT || 10000, () => console.log("Server running"));
+app.listen(process.env.PORT||10000,()=>console.log("Server running"));
