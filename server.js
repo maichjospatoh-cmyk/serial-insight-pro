@@ -1,4 +1,4 @@
-console.log("MULTI-USER SYSTEM ✅");
+console.log("ENTERPRISE USER MANAGEMENT SYSTEM ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -25,27 +25,28 @@ app.get("/", (req,res)=>res.redirect("/login"));
 
 const USERS_FILE = "users.json";
 
-// DEFAULT USERS
+// INIT USERS
 if (!fs.existsSync(USERS_FILE)) {
   fs.writeFileSync(USERS_FILE, JSON.stringify([
-    { username: "admin", password: bcrypt.hashSync("admin123",10), role: "admin" },
-    { username: "agent1", password: bcrypt.hashSync("1234",10), role: "agent" }
+    { username: "admin", password: bcrypt.hashSync("admin123",10), role: "admin" }
   ], null, 2));
 }
 
 const getUsers = () => JSON.parse(fs.readFileSync(USERS_FILE));
+const saveUsers = (u) => fs.writeFileSync(USERS_FILE, JSON.stringify(u, null, 2));
 
 // UI
 function page(content){
 return `
 <html>
 <head>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body{margin:0;font-family:Arial;background:linear-gradient(135deg,#0f7a2f,#28a745);}
-.card{background:white;padding:40px;width:520px;margin:auto;margin-top:80px;border-radius:14px;text-align:center;}
+.card{background:white;padding:40px;width:520px;margin:auto;margin-top:60px;border-radius:14px;text-align:center;}
 .logo{width:140px;margin-bottom:15px;}
 .nav a{margin:0 10px;color:#0f7a2f;font-weight:bold;text-decoration:none;}
+input,select{width:90%;padding:10px;margin:10px;}
+button{background:#0f7a2f;color:white;padding:10px;border:none;}
 </style>
 </head>
 <body>
@@ -68,8 +69,8 @@ app.use((req,res,next)=>{
 app.get("/login",(req,res)=>res.send(page(`
 <h2>Login</h2>
 <form method="post">
-<input name="username"><br><br>
-<input name="password" type="password"><br><br>
+<input name="username">
+<input type="password" name="password">
 <button>Login</button>
 </form>
 `)));
@@ -84,64 +85,37 @@ req.session.user=user;
 res.redirect("/dashboard");
 });
 
-// DASHBOARD (ROLE BASED)
+// DASHBOARD
 app.get("/dashboard",(req,res)=>{
-const file="output/result.xlsx";
-if(!fs.existsSync(file)) return res.send(page("No data"));
-
-const wb=xlsx.readFile(file);
-let data=xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-
-// 🔥 FILTER FOR AGENT
-if(req.session.user.role==="agent"){
-  data=data.filter(r=>r["agent name"]===req.session.user.username);
-}
-
-const map={};
-data.forEach(r=>{
-const a=r["agent name"]||"Unknown";
-map[a]=(map[a]||0)+1;
-});
-
 res.send(page(`
 <h2>Dashboard (${req.session.user.role})</h2>
-<pre>${JSON.stringify(map,null,2)}</pre>
 
 <div class="nav">
 <a href="/home">Upload</a>
+<a href="/users">Manage Users</a>
 <a href="/logout">Logout</a>
 </div>
 `));
 });
 
-// HOME (ADMIN ONLY)
+// HOME
 app.get("/home",(req,res)=>{
-if(req.session.user.role!=="admin") return res.send(page("Access denied"));
+if(req.session.user.role!=="admin") return res.send(page("Denied"));
 
 res.send(page(`
 <h2>Upload</h2>
 <form action="/process" method="post" enctype="multipart/form-data">
-<input type="file" name="files"><br><br>
-<input type="file" name="files"><br><br>
+<input type="file" name="files"><br>
+<input type="file" name="files"><br>
 <button>Process</button>
 </form>
-
-<div class="nav">
-<a href="/dashboard">Dashboard</a>
-<a href="/logout">Logout</a>
-</div>
 `));
 });
 
-// PROCESS (ADMIN ONLY)
+// PROCESS
 app.post("/process",upload.array("files",2),(req,res)=>{
-if(req.session.user.role!=="admin") return res.send("Denied");
-
 exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`,()=>{
-res.send(page(`
-<h2>Done ✅</h2>
-<a href="/download">Download</a>
-`));
+res.send(page(`<h2>Done ✅</h2><a href="/download">Download</a>`));
 });
 });
 
@@ -150,6 +124,49 @@ app.get("/download",(req,res)=>{
 const file=path.join(__dirname,"output","result.xlsx");
 if(!fs.existsSync(file)) return res.send(page("No file"));
 res.download(file);
+});
+
+// 🔥 USER MANAGEMENT PAGE
+app.get("/users",(req,res)=>{
+if(req.session.user.role!=="admin") return res.send("Denied");
+
+const users=getUsers();
+
+res.send(page(`
+<h2>Manage Users</h2>
+
+<form method="post">
+<input name="username" placeholder="Username">
+<input name="password" placeholder="Password">
+<select name="role">
+<option value="agent">Agent</option>
+<option value="admin">Admin</option>
+</select>
+<button>Create User</button>
+</form>
+
+<h3>Existing Users</h3>
+<pre>${JSON.stringify(users,null,2)}</pre>
+
+<div class="nav">
+<a href="/dashboard">Back</a>
+</div>
+`));
+});
+
+// CREATE USER
+app.post("/users",async(req,res)=>{
+const users=getUsers();
+
+users.push({
+username:req.body.username,
+password:await bcrypt.hash(req.body.password,10),
+role:req.body.role
+});
+
+saveUsers(users);
+
+res.redirect("/users");
 });
 
 // LOGOUT
