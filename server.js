@@ -1,4 +1,4 @@
-console.log("ENTERPRISE USER MANAGEMENT SYSTEM ✅");
+console.log("ROLE-BASED SYSTEM (ADMIN + AGENT VIEW) ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -25,7 +25,6 @@ app.get("/", (req,res)=>res.redirect("/login"));
 
 const USERS_FILE = "users.json";
 
-// INIT USERS
 if (!fs.existsSync(USERS_FILE)) {
   fs.writeFileSync(USERS_FILE, JSON.stringify([
     { username: "admin", password: bcrypt.hashSync("admin123",10), role: "admin" }
@@ -40,6 +39,7 @@ function page(content){
 return `
 <html>
 <head>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body{margin:0;font-family:Arial;background:linear-gradient(135deg,#0f7a2f,#28a745);}
 .card{background:white;padding:40px;width:520px;margin:auto;margin-top:60px;border-radius:14px;text-align:center;}
@@ -85,22 +85,55 @@ req.session.user=user;
 res.redirect("/dashboard");
 });
 
-// DASHBOARD
+// DASHBOARD (FILTERED)
 app.get("/dashboard",(req,res)=>{
+const file="output/result.xlsx";
+if(!fs.existsSync(file)) return res.send(page("No data"));
+
+const wb=xlsx.readFile(file);
+let data=xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+
+// 🔥 FILTER FOR AGENTS
+if(req.session.user.role==="agent"){
+  data=data.filter(r=>r["agent name"]===req.session.user.username);
+}
+
+// GROUP
+const map={};
+data.forEach(r=>{
+const a=r["agent name"]||"Unknown";
+map[a]=(map[a]||0)+1;
+});
+
+// CHART DATA
+const labels=Object.keys(map);
+const values=Object.values(map);
+
 res.send(page(`
-<h2>Dashboard (${req.session.user.role})</h2>
+<h2>Dashboard (${req.session.user.username})</h2>
+
+<canvas id="chart"></canvas>
+
+<script>
+new Chart(document.getElementById("chart"),{
+type:"bar",
+data:{
+labels:${JSON.stringify(labels)},
+datasets:[{data:${JSON.stringify(values)}}]
+}
+});
+</script>
 
 <div class="nav">
-<a href="/home">Upload</a>
-<a href="/users">Manage Users</a>
+${req.session.user.role==="admin" ? '<a href="/home">Upload</a><a href="/users">Users</a>' : ''}
 <a href="/logout">Logout</a>
 </div>
 `));
 });
 
-// HOME
+// HOME (ADMIN ONLY)
 app.get("/home",(req,res)=>{
-if(req.session.user.role!=="admin") return res.send(page("Denied"));
+if(req.session.user.role!=="admin") return res.send(page("Access denied"));
 
 res.send(page(`
 <h2>Upload</h2>
@@ -114,6 +147,8 @@ res.send(page(`
 
 // PROCESS
 app.post("/process",upload.array("files",2),(req,res)=>{
+if(req.session.user.role!=="admin") return res.send("Denied");
+
 exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`,()=>{
 res.send(page(`<h2>Done ✅</h2><a href="/download">Download</a>`));
 });
@@ -126,14 +161,14 @@ if(!fs.existsSync(file)) return res.send(page("No file"));
 res.download(file);
 });
 
-// 🔥 USER MANAGEMENT PAGE
+// USER MANAGEMENT
 app.get("/users",(req,res)=>{
 if(req.session.user.role!=="admin") return res.send("Denied");
 
 const users=getUsers();
 
 res.send(page(`
-<h2>Manage Users</h2>
+<h2>Users</h2>
 
 <form method="post">
 <input name="username" placeholder="Username">
@@ -142,10 +177,9 @@ res.send(page(`
 <option value="agent">Agent</option>
 <option value="admin">Admin</option>
 </select>
-<button>Create User</button>
+<button>Create</button>
 </form>
 
-<h3>Existing Users</h3>
 <pre>${JSON.stringify(users,null,2)}</pre>
 
 <div class="nav">
@@ -154,7 +188,6 @@ res.send(page(`
 `));
 });
 
-// CREATE USER
 app.post("/users",async(req,res)=>{
 const users=getUsers();
 
