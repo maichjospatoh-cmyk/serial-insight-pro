@@ -1,4 +1,4 @@
-console.log("STABLE SYSTEM (NO DATABASE) ✅");
+console.log("SYSTEM WITH HISTORY + CARDS ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -22,20 +22,18 @@ app.use(session({
   saveUninitialized: false
 }));
 
-// ROOT
-app.get("/", (req,res)=>res.redirect("/login"));
+// ensure folders
+if (!fs.existsSync("history")) fs.mkdirSync("history");
 
 // USERS
 const USERS_FILE="users.json";
-
 if (!fs.existsSync(USERS_FILE)) {
   fs.writeFileSync(USERS_FILE, JSON.stringify([
     { username: "admin", password: bcrypt.hashSync("admin123",10) }
-  ], null, 2));
+  ]));
 }
-
-const getUsers = () => JSON.parse(fs.readFileSync(USERS_FILE));
-const saveUsers = (u) => fs.writeFileSync(USERS_FILE, JSON.stringify(u, null, 2));
+const getUsers=()=>JSON.parse(fs.readFileSync(USERS_FILE));
+const saveUsers=(u)=>fs.writeFileSync(USERS_FILE, JSON.stringify(u,null,2));
 
 // UI
 function page(content){
@@ -47,9 +45,11 @@ return `
 body{margin:0;font-family:Arial;display:flex;}
 .sidebar{width:220px;background:#0f7a2f;color:white;height:100vh;padding:20px;position:fixed;}
 .sidebar img{width:120px;margin:auto;display:block;margin-bottom:20px;}
-.sidebar a{display:block;color:white;margin:10px 0;text-decoration:none;}
+.sidebar a{display:block;color:white;margin:12px 0;text-decoration:none;}
 .main{margin-left:220px;padding:30px;width:100%;background:#f4f4f4;}
-.card{background:white;padding:20px;border-radius:10px;}
+.card{background:white;padding:20px;border-radius:10px;margin-bottom:20px;}
+.cards{display:flex;gap:20px;flex-wrap:wrap;}
+.kpi{flex:1;background:#0f7a2f;color:white;padding:20px;border-radius:10px;}
 </style>
 </head>
 
@@ -59,14 +59,12 @@ body{margin:0;font-family:Arial;display:flex;}
 <img src="/assets/logo.jpeg">
 <a href="/dashboard">Dashboard</a>
 <a href="/home">Upload</a>
-<a href="/change-password">Password</a>
+<a href="/history">History</a>
 <a href="/logout">Logout</a>
 </div>
 
 <div class="main">
-<div class="card">
 ${content}
-</div>
 </div>
 
 </body>
@@ -93,54 +91,34 @@ app.get("/login",(req,res)=>res.send(`
 `));
 
 app.post("/login",async(req,res)=>{
-const user=getUsers().find(u=>u.username===req.body.username);
-if(!user) return res.send("Invalid login");
-
-const ok=await bcrypt.compare(req.body.password,user.password);
-if(!ok) return res.send("Invalid login");
-
-req.session.user=user;
+const u=getUsers().find(x=>x.username===req.body.username);
+if(!u) return res.send("Invalid");
+if(!(await bcrypt.compare(req.body.password,u.password))) return res.send("Invalid");
+req.session.user=u;
 res.redirect("/dashboard");
 });
 
-// DASHBOARD (WITH FILTERS)
+// DASHBOARD WITH CARDS
 app.get("/dashboard",(req,res)=>{
 const file="output/result.xlsx";
-
-if(!fs.existsSync(file)){
-  return res.redirect("/home");
-}
+if(!fs.existsSync(file)) return res.redirect("/home");
 
 const wb=xlsx.readFile(file);
-let data=xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"]);
+const data=xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"]);
 
-// FILTERS
-const agent=req.query.agent;
-const van=req.query.van;
-
-if(agent) data=data.filter(r=>r.Agent===agent);
-if(van) data=data.filter(r=>r["Van Plate"]===van);
-
-const agents=[...new Set(data.map(r=>r.Agent))];
-const vans=[...new Set(data.map(r=>r["Van Plate"]))];
+const total=data.reduce((a,b)=>a+b.Total,0);
+const dup=data.reduce((a,b)=>a+b.Duplicates,0);
+const quality = total ? ((total-dup)/total*100).toFixed(1) : 0;
 
 res.send(page(`
-<h2>Dashboard</h2>
+<div class="cards">
+<div class="kpi">Total<br><h2>${total}</h2></div>
+<div class="kpi">Duplicates<br><h2>${dup}</h2></div>
+<div class="kpi">Quality<br><h2>${quality}%</h2></div>
+</div>
 
-<form>
-<select name="agent">
-<option value="">All Agents</option>
-${agents.map(a=>`<option>${a}</option>`).join("")}
-</select>
-
-<select name="van">
-<option value="">All Vans</option>
-${vans.map(v=>`<option>${v}</option>`).join("")}
-</select>
-
-<button>Filter</button>
-</form>
-
+<div class="card">
+<h3>Agent Performance</h3>
 <table border="1" width="100%">
 <tr><th>Agent</th><th>Van</th><th>Total</th><th>Dup</th><th>Quality</th></tr>
 ${data.map(r=>`
@@ -153,11 +131,32 @@ ${data.map(r=>`
 </tr>
 `).join("")}
 </table>
+</div>
 `));
+});
+
+// HISTORY PAGE
+app.get("/history",(req,res)=>{
+const files = fs.readdirSync("history");
+
+res.send(page(`
+<div class="card">
+<h2>History</h2>
+${files.map(f=>`
+<a href="/history/${f}">${f}</a><br>
+`).join("")}
+</div>
+`));
+});
+
+// VIEW HISTORY FILE
+app.get("/history/:file",(req,res)=>{
+res.download(path.join(__dirname,"history",req.params.file));
 });
 
 // HOME
 app.get("/home",(req,res)=>res.send(page(`
+<div class="card">
 <h2>Upload Reports</h2>
 
 <form action="/process" method="post" enctype="multipart/form-data">
@@ -165,62 +164,40 @@ app.get("/home",(req,res)=>res.send(page(`
 <input type="file" name="files" required><br><br>
 <button>Process</button>
 </form>
+</div>
 `)));
 
-// PROCESS
+// PROCESS + SAVE HISTORY
 app.post("/process",upload.array("files",2),(req,res)=>{
 exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`,()=>{
+
+const timestamp = new Date().toISOString().replace(/[:.]/g,"-");
+const newName = `history/report-${timestamp}.xlsx`;
+
+fs.copyFileSync("output/result.xlsx", newName);
+
 res.send(page(`
+<div class="card">
 <h2>Processing Complete</h2>
 
 <a href="/download">Download Excel</a><br><br>
-<a href="/download-pdf">Download PDF Report</a>
+<a href="/download-pdf">Download PDF</a>
+</div>
 `));
 });
 });
 
-// DOWNLOAD EXCEL
-app.get("/download",(req,res)=>{
-res.download("output/result.xlsx");
-});
+// DOWNLOAD
+app.get("/download",(req,res)=>res.download("output/result.xlsx"));
 
 // PDF
 app.get("/download-pdf",(req,res)=>{
 const doc=new PDFDocument();
-
 res.setHeader("Content-Type","application/pdf");
 res.setHeader("Content-Disposition","attachment; filename=report.pdf");
-
 doc.pipe(res);
-
 doc.fontSize(18).text("Serial Insight Report",{align:"center"});
-doc.moveDown();
-doc.text("Generated Report");
-
 doc.end();
-});
-
-// CHANGE PASSWORD
-app.get("/change-password",(req,res)=>res.send(page(`
-<h2>Change Password</h2>
-<form method="post">
-<input name="oldPassword" type="password"><br><br>
-<input name="newPassword" type="password"><br><br>
-<button>Update</button>
-</form>
-`)));
-
-app.post("/change-password",async(req,res)=>{
-const users=getUsers();
-const i=users.findIndex(u=>u.username===req.session.user.username);
-
-const match=await bcrypt.compare(req.body.oldPassword,users[i].password);
-if(!match) return res.send(page("Wrong password"));
-
-users[i].password=await bcrypt.hash(req.body.newPassword,10);
-saveUsers(users);
-
-res.send(page("Password updated"));
 });
 
 // LOGOUT
