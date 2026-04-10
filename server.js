@@ -1,4 +1,4 @@
-console.log("ULTIMATE SYSTEM (CHARTS + HISTORY + USERS) ✅");
+console.log("ELITE SYSTEM (ROLES + EMAIL + REALTIME) ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -8,7 +8,6 @@ const path = require("path");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const xlsx = require("xlsx");
-const PDFDocument = require("pdfkit");
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
@@ -24,32 +23,38 @@ app.use(session({
 
 if (!fs.existsSync("history")) fs.mkdirSync("history");
 
-// USERS FILE
+// USERS
 const USERS_FILE="users.json";
 if (!fs.existsSync(USERS_FILE)) {
   fs.writeFileSync(USERS_FILE, JSON.stringify([
-    { username: "admin", password: bcrypt.hashSync("admin123",10) }
+    { username: "admin", password: bcrypt.hashSync("admin123",10), role:"admin" }
   ], null, 2));
 }
 
 const getUsers=()=>JSON.parse(fs.readFileSync(USERS_FILE));
 const saveUsers=(u)=>fs.writeFileSync(USERS_FILE, JSON.stringify(u,null,2));
 
+// ROLE CHECK
+function isAdmin(req){
+  return req.session.user?.role === "admin";
+}
+
 // UI
 function page(content){
 return `
 <html>
 <head>
+<meta http-equiv="refresh" content="5">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body{margin:0;font-family:Arial;display:flex;}
-.sidebar{width:220px;background:#0f7a2f;color:white;height:100vh;padding:20px;position:fixed;}
-.sidebar img{width:120px;margin:auto;display:block;margin-bottom:20px;}
-.sidebar a{display:block;color:white;margin:10px 0;text-decoration:none;}
-.main{margin-left:220px;padding:30px;width:100%;background:#f4f4f4;}
-.card{background:white;padding:20px;border-radius:10px;margin-bottom:20px;}
-.cards{display:flex;gap:20px;flex-wrap:wrap;}
-.kpi{flex:1;background:#0f7a2f;color:white;padding:20px;border-radius:10px;}
+.sidebar{width:240px;background:#0f7a2f;color:white;height:100vh;padding:20px;position:fixed;}
+.sidebar img{width:140px;margin:auto;display:block;margin-bottom:20px;}
+.sidebar a{display:block;color:white;margin:12px 0;text-decoration:none;font-size:18px;}
+.main{margin-left:240px;padding:30px;width:100%;background:#f4f4f4;}
+.card{background:white;padding:20px;border-radius:12px;margin-bottom:20px;}
+.cards{display:flex;gap:20px;}
+.kpi{flex:1;background:#0f7a2f;color:white;padding:20px;border-radius:12px;text-align:center;}
 </style>
 </head>
 
@@ -59,8 +64,11 @@ body{margin:0;font-family:Arial;display:flex;}
 <img src="/assets/logo.jpeg">
 <a href="/dashboard">Dashboard</a>
 <a href="/home">Upload</a>
+${isAdmin({session:{user:global.user||{}}}) ? `
 <a href="/history">History</a>
 <a href="/users">Users</a>
+` : ``}
+<a href="/email">Email</a>
 <a href="/logout">Logout</a>
 </div>
 
@@ -76,6 +84,7 @@ ${content}
 app.use((req,res,next)=>{
   if(req.path==="/login") return next();
   if(!req.session.user) return res.redirect("/login");
+  global.user=req.session.user;
   next();
 });
 
@@ -94,12 +103,15 @@ app.get("/login",(req,res)=>res.send(`
 app.post("/login",async(req,res)=>{
 const u=getUsers().find(x=>x.username===req.body.username);
 if(!u) return res.send("Invalid");
-if(!(await bcrypt.compare(req.body.password,u.password))) return res.send("Invalid");
+
+if(!(await bcrypt.compare(req.body.password,u.password)))
+  return res.send("Invalid");
+
 req.session.user=u;
 res.redirect("/dashboard");
 });
 
-// DASHBOARD WITH CHARTS
+// DASHBOARD (REAL-TIME)
 app.get("/dashboard",(req,res)=>{
 const file="output/result.xlsx";
 if(!fs.existsSync(file)) return res.redirect("/home");
@@ -109,92 +121,52 @@ const data=xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"]);
 
 const total=data.reduce((a,b)=>a+b.Total,0);
 const dup=data.reduce((a,b)=>a+b.Duplicates,0);
-const quality = total ? ((total-dup)/total*100).toFixed(1) : 0;
+const quality=((total-dup)/total*100||0).toFixed(1);
 
 const labels=data.map(r=>r.Agent);
 const values=data.map(r=>r.Total);
 
 res.send(page(`
 <div class="cards">
-<div class="kpi">Total<br><h2>${total}</h2></div>
-<div class="kpi">Duplicates<br><h2>${dup}</h2></div>
-<div class="kpi">Quality<br><h2>${quality}%</h2></div>
+<div class="kpi"><h3>Total</h3><h1>${total}</h1></div>
+<div class="kpi"><h3>Duplicates</h3><h1>${dup}</h1></div>
+<div class="kpi"><h3>Quality</h3><h1>${quality}%</h1></div>
 </div>
 
 <div class="card">
-<canvas id="barChart"></canvas>
-</div>
-
-<div class="card">
-<canvas id="pieChart"></canvas>
+<canvas id="bar"></canvas>
 </div>
 
 <script>
-new Chart(document.getElementById("barChart"),{
+new Chart(document.getElementById("bar"),{
 type:"bar",
 data:{labels:${JSON.stringify(labels)},datasets:[{data:${JSON.stringify(values)}}]}
 });
-
-new Chart(document.getElementById("pieChart"),{
-type:"pie",
-data:{labels:["Clean","Duplicates"],datasets:[{data:[${total-dup},${dup}]}]}
-});
 </script>
-
-<div class="card">
-<h3>Table</h3>
-<table border="1" width="100%">
-<tr><th>Agent</th><th>Van</th><th>Total</th><th>Dup</th><th>Quality</th></tr>
-${data.map(r=>`
-<tr>
-<td>${r.Agent}</td>
-<td>${r["Van Plate"]}</td>
-<td>${r.Total}</td>
-<td style="color:red">${r.Duplicates}</td>
-<td>${r["Quality %"]}%</td>
-</tr>
-`).join("")}
-</table>
-</div>
 `));
 });
 
-// HISTORY
-app.get("/history",(req,res)=>{
-const files=fs.readdirSync("history");
-
+// EMAIL PAGE (AUTO CONTENT)
+app.get("/email",(req,res)=>{
 res.send(page(`
 <div class="card">
-<h2>History</h2>
-${files.map(f=>`<a href="/history/${f}">${f}</a><br>`).join("")}
-<br><br>
-<a href="/export-history">Download Summary</a>
+<h2>Email Report</h2>
+<textarea style="width:100%;height:200px;">
+Subject: Daily Serial Report
+
+Attached is today's performance report.
+
+Regards,
+System
+</textarea>
 </div>
 `));
 });
 
-// EXPORT HISTORY SUMMARY
-app.get("/export-history",(req,res)=>{
-const files=fs.readdirSync("history");
-
-let rows=[];
-
-files.forEach(f=>{
-rows.push({file:f});
-});
-
-const wb=xlsx.utils.book_new();
-const ws=xlsx.utils.json_to_sheet(rows);
-xlsx.utils.book_append_sheet(wb,ws,"Summary");
-
-const file="history-summary.xlsx";
-xlsx.writeFile(wb,file);
-
-res.download(file);
-});
-
-// USERS MANAGEMENT
+// USERS (ADMIN ONLY)
 app.get("/users",(req,res)=>{
+if(!isAdmin(req)) return res.send("Access denied");
+
 const users=getUsers();
 
 res.send(page(`
@@ -202,14 +174,18 @@ res.send(page(`
 <h2>Users</h2>
 
 <form method="post">
-<input name="username" placeholder="New user"><br><br>
+<input name="username"><br><br>
 <input name="password" type="password"><br><br>
-<button>Add User</button>
+<select name="role">
+<option value="agent">Agent</option>
+<option value="admin">Admin</option>
+</select><br><br>
+<button>Add</button>
 </form>
 
 <hr>
 
-${users.map(u=>`<div>${u.username}</div>`).join("")}
+${users.map(u=>`${u.username} (${u.role})<br>`).join("")}
 </div>
 `));
 });
@@ -219,7 +195,8 @@ const users=getUsers();
 
 users.push({
 username:req.body.username,
-password:await bcrypt.hash(req.body.password,10)
+password:await bcrypt.hash(req.body.password,10),
+role:req.body.role
 });
 
 saveUsers(users);
@@ -229,17 +206,9 @@ res.redirect("/users");
 // PROCESS
 app.post("/process",upload.array("files",2),(req,res)=>{
 exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`,()=>{
-
 const timestamp=new Date().toISOString().replace(/[:.]/g,"-");
 fs.copyFileSync("output/result.xlsx",`history/report-${timestamp}.xlsx`);
-
-res.send(page(`
-<div class="card">
-<h2>Done</h2>
-<a href="/download">Excel</a><br>
-<a href="/download-pdf">PDF</a>
-</div>
-`));
+res.redirect("/dashboard");
 });
 });
 
@@ -254,18 +223,6 @@ app.get("/home",(req,res)=>res.send(page(`
 </form>
 </div>
 `)));
-
-// DOWNLOAD
-app.get("/download",(req,res)=>res.download("output/result.xlsx"));
-
-// PDF
-app.get("/download-pdf",(req,res)=>{
-const doc=new PDFDocument();
-res.setHeader("Content-Type","application/pdf");
-doc.pipe(res);
-doc.text("Report");
-doc.end();
-});
 
 // LOGOUT
 app.get("/logout",(req,res)=>{
