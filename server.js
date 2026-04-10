@@ -1,4 +1,4 @@
-console.log("STABLE SYSTEM (NO CRON) ✅");
+console.log("EXECUTIVE SYSTEM LIVE ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -21,22 +21,22 @@ app.use(session({
   saveUninitialized: false
 }));
 
-// ROOT FIX
-app.get("/", (req, res) => res.redirect("/login"));
+// ROOT
+app.get("/", (req,res)=>res.redirect("/login"));
 
-// USERS FILE
-const USERS_FILE = "users.json";
+// USERS
+const USERS_FILE="users.json";
 
 if (!fs.existsSync(USERS_FILE)) {
   fs.writeFileSync(USERS_FILE, JSON.stringify([
-    { username: "admin", password: bcrypt.hashSync("admin123",10), role: "admin" }
+    { username: "admin", password: bcrypt.hashSync("admin123",10) }
   ], null, 2));
 }
 
 const getUsers = () => JSON.parse(fs.readFileSync(USERS_FILE));
 const saveUsers = (u) => fs.writeFileSync(USERS_FILE, JSON.stringify(u, null, 2));
 
-// 🎨 UI
+// UI
 function page(content){
 return `
 <html>
@@ -55,11 +55,11 @@ body{
 .card{
   background:white;
   padding:40px;
-  width:520px;
+  width:550px;
   border-radius:14px;
   text-align:center;
 }
-.logo{width:150px;margin-bottom:20px;}
+.logo{width:160px;margin-bottom:20px;}
 input{width:95%;padding:12px;margin:10px 0;}
 button{background:#0f7a2f;color:white;padding:12px;border:none;}
 .nav a{
@@ -87,9 +87,9 @@ ${content}
 </html>`;
 }
 
-// 🔐 AUTH
+// AUTH
 app.use((req,res,next)=>{
-  if(req.path === "/login") return next();
+  if(req.path==="/login") return next();
   if(!req.session.user) return res.redirect("/login");
   next();
 });
@@ -115,35 +115,51 @@ req.session.user=user;
 res.redirect("/dashboard");
 });
 
-// DASHBOARD
+// DASHBOARD (EXECUTIVE)
 app.get("/dashboard",(req,res)=>{
 const file="output/result.xlsx";
 
 if(!fs.existsSync(file)){
-  return res.send(page(`
-    <h2>Dashboard</h2>
-    <p>No data yet</p>
-    <div class="nav">
-      <a href="/home">Upload</a>
-      <a href="/logout">Logout</a>
-    </div>
-  `));
+  return res.send(page("<h2>No data yet</h2>"));
 }
 
 const wb=xlsx.readFile(file);
 const data=xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
 
-const map={};
+// KPIs
+const total = data.length;
+const duplicates = data.filter(r=>r["duplicate_per_agent"]).length;
+const clean = total - duplicates;
+const quality = total ? ((clean/total)*100).toFixed(1) : 0;
+
+// AGENTS
+const agentMap={};
+
 data.forEach(r=>{
   const a=r["agent name"]||"Unknown";
-  map[a]=(map[a]||0)+1;
+  if(!agentMap[a]) agentMap[a]={total:0,dup:0};
+  agentMap[a].total++;
+  if(r["duplicate_per_agent"]) agentMap[a].dup++;
 });
 
-const labels=Object.keys(map);
-const values=Object.values(map);
+// RANK
+const ranking = Object.entries(agentMap).map(([name,val])=>{
+  const score = val.total ? ((val.total-val.dup)/val.total)*100 : 0;
+  return {name,score:score.toFixed(1)};
+}).sort((a,b)=>b.score-a.score);
+
+// CHART
+const labels = Object.keys(agentMap);
+const values = Object.values(agentMap).map(v=>v.total);
 
 res.send(page(`
-<h2>Dashboard</h2>
+<h2>Executive Dashboard 📊</h2>
+
+<h3>Total: ${total}</h3>
+<h3 style="color:red">Duplicates: ${duplicates}</h3>
+<h3 style="color:green">Quality: ${quality}%</h3>
+
+<h3>Top Agent: ${ranking[0]?.name || "N/A"}</h3>
 
 <canvas id="chart"></canvas>
 
@@ -157,8 +173,20 @@ datasets:[{data:${JSON.stringify(values)}}]
 });
 </script>
 
+<h3>Agent Ranking</h3>
+<table border="1" style="width:100%">
+<tr><th>Agent</th><th>Quality %</th></tr>
+${ranking.map(r=>`
+<tr>
+<td>${r.name}</td>
+<td style="color:${r.score<80?'red':'green'}">${r.score}%</td>
+</tr>
+`).join("")}
+</table>
+
 <div class="nav">
 <a href="/home">Upload</a>
+<a href="/change-password">Password</a>
 <a href="/logout">Logout</a>
 </div>
 `));
@@ -176,7 +204,6 @@ app.get("/home",(req,res)=>res.send(page(`
 
 <div class="nav">
 <a href="/dashboard">Dashboard</a>
-<a href="/change-password">Password</a>
 <a href="/logout">Logout</a>
 </div>
 `)));
