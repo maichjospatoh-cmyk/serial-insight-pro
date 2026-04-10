@@ -1,4 +1,4 @@
-console.log("SYSTEM WITH HISTORY + CARDS ✅");
+console.log("ULTIMATE SYSTEM (CHARTS + HISTORY + USERS) ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -22,16 +22,16 @@ app.use(session({
   saveUninitialized: false
 }));
 
-// ensure folders
 if (!fs.existsSync("history")) fs.mkdirSync("history");
 
-// USERS
+// USERS FILE
 const USERS_FILE="users.json";
 if (!fs.existsSync(USERS_FILE)) {
   fs.writeFileSync(USERS_FILE, JSON.stringify([
     { username: "admin", password: bcrypt.hashSync("admin123",10) }
-  ]));
+  ], null, 2));
 }
+
 const getUsers=()=>JSON.parse(fs.readFileSync(USERS_FILE));
 const saveUsers=(u)=>fs.writeFileSync(USERS_FILE, JSON.stringify(u,null,2));
 
@@ -45,7 +45,7 @@ return `
 body{margin:0;font-family:Arial;display:flex;}
 .sidebar{width:220px;background:#0f7a2f;color:white;height:100vh;padding:20px;position:fixed;}
 .sidebar img{width:120px;margin:auto;display:block;margin-bottom:20px;}
-.sidebar a{display:block;color:white;margin:12px 0;text-decoration:none;}
+.sidebar a{display:block;color:white;margin:10px 0;text-decoration:none;}
 .main{margin-left:220px;padding:30px;width:100%;background:#f4f4f4;}
 .card{background:white;padding:20px;border-radius:10px;margin-bottom:20px;}
 .cards{display:flex;gap:20px;flex-wrap:wrap;}
@@ -60,6 +60,7 @@ body{margin:0;font-family:Arial;display:flex;}
 <a href="/dashboard">Dashboard</a>
 <a href="/home">Upload</a>
 <a href="/history">History</a>
+<a href="/users">Users</a>
 <a href="/logout">Logout</a>
 </div>
 
@@ -98,7 +99,7 @@ req.session.user=u;
 res.redirect("/dashboard");
 });
 
-// DASHBOARD WITH CARDS
+// DASHBOARD WITH CHARTS
 app.get("/dashboard",(req,res)=>{
 const file="output/result.xlsx";
 if(!fs.existsSync(file)) return res.redirect("/home");
@@ -110,6 +111,9 @@ const total=data.reduce((a,b)=>a+b.Total,0);
 const dup=data.reduce((a,b)=>a+b.Duplicates,0);
 const quality = total ? ((total-dup)/total*100).toFixed(1) : 0;
 
+const labels=data.map(r=>r.Agent);
+const values=data.map(r=>r.Total);
+
 res.send(page(`
 <div class="cards">
 <div class="kpi">Total<br><h2>${total}</h2></div>
@@ -118,7 +122,27 @@ res.send(page(`
 </div>
 
 <div class="card">
-<h3>Agent Performance</h3>
+<canvas id="barChart"></canvas>
+</div>
+
+<div class="card">
+<canvas id="pieChart"></canvas>
+</div>
+
+<script>
+new Chart(document.getElementById("barChart"),{
+type:"bar",
+data:{labels:${JSON.stringify(labels)},datasets:[{data:${JSON.stringify(values)}}]}
+});
+
+new Chart(document.getElementById("pieChart"),{
+type:"pie",
+data:{labels:["Clean","Duplicates"],datasets:[{data:[${total-dup},${dup}]}]}
+});
+</script>
+
+<div class="card">
+<h3>Table</h3>
 <table border="1" width="100%">
 <tr><th>Agent</th><th>Van</th><th>Total</th><th>Dup</th><th>Quality</th></tr>
 ${data.map(r=>`
@@ -135,57 +159,101 @@ ${data.map(r=>`
 `));
 });
 
-// HISTORY PAGE
+// HISTORY
 app.get("/history",(req,res)=>{
-const files = fs.readdirSync("history");
+const files=fs.readdirSync("history");
 
 res.send(page(`
 <div class="card">
 <h2>History</h2>
-${files.map(f=>`
-<a href="/history/${f}">${f}</a><br>
-`).join("")}
+${files.map(f=>`<a href="/history/${f}">${f}</a><br>`).join("")}
+<br><br>
+<a href="/export-history">Download Summary</a>
 </div>
 `));
 });
 
-// VIEW HISTORY FILE
-app.get("/history/:file",(req,res)=>{
-res.download(path.join(__dirname,"history",req.params.file));
+// EXPORT HISTORY SUMMARY
+app.get("/export-history",(req,res)=>{
+const files=fs.readdirSync("history");
+
+let rows=[];
+
+files.forEach(f=>{
+rows.push({file:f});
+});
+
+const wb=xlsx.utils.book_new();
+const ws=xlsx.utils.json_to_sheet(rows);
+xlsx.utils.book_append_sheet(wb,ws,"Summary");
+
+const file="history-summary.xlsx";
+xlsx.writeFile(wb,file);
+
+res.download(file);
+});
+
+// USERS MANAGEMENT
+app.get("/users",(req,res)=>{
+const users=getUsers();
+
+res.send(page(`
+<div class="card">
+<h2>Users</h2>
+
+<form method="post">
+<input name="username" placeholder="New user"><br><br>
+<input name="password" type="password"><br><br>
+<button>Add User</button>
+</form>
+
+<hr>
+
+${users.map(u=>`<div>${u.username}</div>`).join("")}
+</div>
+`));
+});
+
+app.post("/users",async(req,res)=>{
+const users=getUsers();
+
+users.push({
+username:req.body.username,
+password:await bcrypt.hash(req.body.password,10)
+});
+
+saveUsers(users);
+res.redirect("/users");
+});
+
+// PROCESS
+app.post("/process",upload.array("files",2),(req,res)=>{
+exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`,()=>{
+
+const timestamp=new Date().toISOString().replace(/[:.]/g,"-");
+fs.copyFileSync("output/result.xlsx",`history/report-${timestamp}.xlsx`);
+
+res.send(page(`
+<div class="card">
+<h2>Done</h2>
+<a href="/download">Excel</a><br>
+<a href="/download-pdf">PDF</a>
+</div>
+`));
+});
 });
 
 // HOME
 app.get("/home",(req,res)=>res.send(page(`
 <div class="card">
-<h2>Upload Reports</h2>
-
+<h2>Upload</h2>
 <form action="/process" method="post" enctype="multipart/form-data">
-<input type="file" name="files" required><br><br>
-<input type="file" name="files" required><br><br>
+<input type="file" name="files"><br><br>
+<input type="file" name="files"><br><br>
 <button>Process</button>
 </form>
 </div>
 `)));
-
-// PROCESS + SAVE HISTORY
-app.post("/process",upload.array("files",2),(req,res)=>{
-exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`,()=>{
-
-const timestamp = new Date().toISOString().replace(/[:.]/g,"-");
-const newName = `history/report-${timestamp}.xlsx`;
-
-fs.copyFileSync("output/result.xlsx", newName);
-
-res.send(page(`
-<div class="card">
-<h2>Processing Complete</h2>
-
-<a href="/download">Download Excel</a><br><br>
-<a href="/download-pdf">Download PDF</a>
-</div>
-`));
-});
-});
 
 // DOWNLOAD
 app.get("/download",(req,res)=>res.download("output/result.xlsx"));
@@ -194,9 +262,8 @@ app.get("/download",(req,res)=>res.download("output/result.xlsx"));
 app.get("/download-pdf",(req,res)=>{
 const doc=new PDFDocument();
 res.setHeader("Content-Type","application/pdf");
-res.setHeader("Content-Disposition","attachment; filename=report.pdf");
 doc.pipe(res);
-doc.fontSize(18).text("Serial Insight Report",{align:"center"});
+doc.text("Report");
 doc.end();
 });
 
