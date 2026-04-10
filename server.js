@@ -24,7 +24,7 @@ app.use(session({
 }));
 
 // 🔥 CONNECT MONGODB
-mongoose.connect("mongodb://127.0.0.1:27017/serialDB");
+mongoose.connect("mongodb+srv://admin:admin123@cluster0.xxxxx.mongodb.net/serialDB?retryWrites=true&w=majority");
 
 const RecordSchema = new mongoose.Schema({
   agent: String,
