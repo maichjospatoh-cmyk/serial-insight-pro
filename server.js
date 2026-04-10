@@ -1,4 +1,4 @@
-console.log("EXECUTIVE SYSTEM LIVE ✅");
+console.log("ENTERPRISE AUTO EMAIL + VAN SYSTEM ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -8,6 +8,7 @@ const path = require("path");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const xlsx = require("xlsx");
+const nodemailer = require("nodemailer");
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
@@ -21,70 +22,40 @@ app.use(session({
   saveUninitialized: false
 }));
 
-// ROOT
 app.get("/", (req,res)=>res.redirect("/login"));
+
+// 🔥 EMAIL CONFIG (EDIT THIS)
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "your-email@gmail.com",
+    pass: "your-app-password"
+  }
+});
+
+// 🔥 AGENT EMAIL MAP
+const agentEmails = {
+  "agent1": "agent1@gmail.com",
+  "agent2": "agent2@gmail.com"
+};
 
 // USERS
 const USERS_FILE="users.json";
-
 if (!fs.existsSync(USERS_FILE)) {
   fs.writeFileSync(USERS_FILE, JSON.stringify([
     { username: "admin", password: bcrypt.hashSync("admin123",10) }
-  ], null, 2));
+  ]));
 }
 
-const getUsers = () => JSON.parse(fs.readFileSync(USERS_FILE));
-const saveUsers = (u) => fs.writeFileSync(USERS_FILE, JSON.stringify(u, null, 2));
+const getUsers=()=>JSON.parse(fs.readFileSync(USERS_FILE));
 
 // UI
-function page(content){
-return `
-<html>
-<head>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-body{
-  margin:0;
-  font-family:Arial;
-  background: linear-gradient(135deg,#0f7a2f,#28a745,#0f7a2f);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  height:100vh;
-}
-.card{
-  background:white;
-  padding:40px;
-  width:550px;
-  border-radius:14px;
-  text-align:center;
-}
-.logo{width:160px;margin-bottom:20px;}
-input{width:95%;padding:12px;margin:10px 0;}
-button{background:#0f7a2f;color:white;padding:12px;border:none;}
-.nav a{
-  font-size:18px;
-  margin:0 10px;
-  color:#0f7a2f;
-  font-weight:bold;
-  text-decoration:none;
-}
-.download-btn{
-  display:inline-block;
-  margin-top:10px;
-  padding:10px;
-  background:#0f7a2f;
-  color:white;
-}
-</style>
-</head>
-<body>
-<div class="card">
-<img src="/assets/logo.jpeg" class="logo"/>
-${content}
-</div>
-</body>
-</html>`;
+function page(c){
+return `<html><body style="text-align:center;font-family:Arial;background:#0f7a2f;color:white;padding:50px">
+<img src="/assets/logo.jpeg" width="140"><br><br>
+<div style="background:white;color:black;padding:20px;width:500px;margin:auto;border-radius:10px">
+${c}
+</div></body></html>`;
 }
 
 // AUTH
@@ -98,158 +69,94 @@ app.use((req,res,next)=>{
 app.get("/login",(req,res)=>res.send(page(`
 <h2>Login</h2>
 <form method="post">
-<input name="username">
-<input name="password" type="password">
+<input name="username"><br><br>
+<input type="password" name="password"><br><br>
 <button>Login</button>
 </form>
 `)));
 
 app.post("/login",async(req,res)=>{
-const user=getUsers().find(u=>u.username===req.body.username);
-if(!user) return res.send(page("Invalid login"));
-
-const ok=await bcrypt.compare(req.body.password,user.password);
-if(!ok) return res.send(page("Invalid login"));
-
-req.session.user=user;
-res.redirect("/dashboard");
-});
-
-// DASHBOARD (EXECUTIVE)
-app.get("/dashboard",(req,res)=>{
-const file="output/result.xlsx";
-
-if(!fs.existsSync(file)){
-  return res.send(page("<h2>No data yet</h2>"));
-}
-
-const wb=xlsx.readFile(file);
-const data=xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-
-// KPIs
-const total = data.length;
-const duplicates = data.filter(r=>r["duplicate_per_agent"]).length;
-const clean = total - duplicates;
-const quality = total ? ((clean/total)*100).toFixed(1) : 0;
-
-// AGENTS
-const agentMap={};
-
-data.forEach(r=>{
-  const a=r["agent name"]||"Unknown";
-  if(!agentMap[a]) agentMap[a]={total:0,dup:0};
-  agentMap[a].total++;
-  if(r["duplicate_per_agent"]) agentMap[a].dup++;
-});
-
-// RANK
-const ranking = Object.entries(agentMap).map(([name,val])=>{
-  const score = val.total ? ((val.total-val.dup)/val.total)*100 : 0;
-  return {name,score:score.toFixed(1)};
-}).sort((a,b)=>b.score-a.score);
-
-// CHART
-const labels = Object.keys(agentMap);
-const values = Object.values(agentMap).map(v=>v.total);
-
-res.send(page(`
-<h2>Executive Dashboard 📊</h2>
-
-<h3>Total: ${total}</h3>
-<h3 style="color:red">Duplicates: ${duplicates}</h3>
-<h3 style="color:green">Quality: ${quality}%</h3>
-
-<h3>Top Agent: ${ranking[0]?.name || "N/A"}</h3>
-
-<canvas id="chart"></canvas>
-
-<script>
-new Chart(document.getElementById("chart"),{
-type:"bar",
-data:{
-labels:${JSON.stringify(labels)},
-datasets:[{data:${JSON.stringify(values)}}]
-}
-});
-</script>
-
-<h3>Agent Ranking</h3>
-<table border="1" style="width:100%">
-<tr><th>Agent</th><th>Quality %</th></tr>
-${ranking.map(r=>`
-<tr>
-<td>${r.name}</td>
-<td style="color:${r.score<80?'red':'green'}">${r.score}%</td>
-</tr>
-`).join("")}
-</table>
-
-<div class="nav">
-<a href="/home">Upload</a>
-<a href="/change-password">Password</a>
-<a href="/logout">Logout</a>
-</div>
-`));
+const u=getUsers().find(x=>x.username===req.body.username);
+if(!u) return res.send("Invalid");
+if(!(await bcrypt.compare(req.body.password,u.password))) return res.send("Invalid");
+req.session.user=u;
+res.redirect("/home");
 });
 
 // HOME
 app.get("/home",(req,res)=>res.send(page(`
-<h2>Upload Reports</h2>
-
+<h2>Upload</h2>
 <form action="/process" method="post" enctype="multipart/form-data">
-<input type="file" name="files" required>
-<input type="file" name="files" required>
+<input type="file" name="files"><br><br>
+<input type="file" name="files"><br><br>
 <button>Process</button>
 </form>
-
-<div class="nav">
 <a href="/dashboard">Dashboard</a>
-<a href="/logout">Logout</a>
-</div>
 `)));
 
-// PROCESS
+// 🔥 PROCESS + EMAIL
 app.post("/process",upload.array("files",2),(req,res)=>{
-exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`,()=>{
-res.send(page(`
-<h2>Processing Complete ✅</h2>
-<a href="/download" class="download-btn">Download Excel</a>
+exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`, async ()=>{
 
-<div class="nav">
-<a href="/home">Back</a>
-</div>
+const file="output/result.xlsx";
+
+const wb=xlsx.readFile(file);
+const data=xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"]);
+
+for(const row of data){
+const agent=row.Agent;
+
+if(agentEmails[agent]){
+await transporter.sendMail({
+from:"your-email@gmail.com",
+to:agentEmails[agent],
+subject:"Your Report",
+text:`Agent: ${agent}
+Van: ${row["Van Plate"]}
+Total: ${row.Total}
+Duplicates: ${row.Duplicates}
+Quality: ${row["Quality %"]}%`,
+attachments:[{filename:"report.xlsx",path:file}]
+});
+}
+}
+
+res.send(page(`
+<h2>Done + Emails Sent ✅</h2>
+<a href="/download">Download Excel</a>
 `));
+
 });
 });
 
 // DOWNLOAD
 app.get("/download",(req,res)=>{
-const file=path.join(__dirname,"output","result.xlsx");
-if(!fs.existsSync(file)) return res.send(page("No file"));
-res.download(file);
+res.download("output/result.xlsx");
 });
 
-// CHANGE PASSWORD
-app.get("/change-password",(req,res)=>res.send(page(`
-<h2>Change Password</h2>
-<form method="post">
-<input name="oldPassword" type="password">
-<input name="newPassword" type="password">
-<button>Update</button>
-</form>
-`)));
+// DASHBOARD (WITH VAN)
+app.get("/dashboard",(req,res)=>{
+const wb=xlsx.readFile("output/result.xlsx");
+const data=xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"]);
 
-app.post("/change-password",async(req,res)=>{
-const users=getUsers();
-const i=users.findIndex(u=>u.username===req.session.user.username);
+res.send(page(`
+<h2>Dashboard</h2>
 
-const match=await bcrypt.compare(req.body.oldPassword,users[i].password);
-if(!match) return res.send(page("Wrong password"));
+<table border="1" style="width:100%">
+<tr><th>Agent</th><th>Van</th><th>Total</th><th>Dup</th><th>Quality</th></tr>
+${data.map(r=>`
+<tr>
+<td>${r.Agent}</td>
+<td>${r["Van Plate"]}</td>
+<td>${r.Total}</td>
+<td style="color:red">${r.Duplicates}</td>
+<td>${r["Quality %"]}%</td>
+</tr>
+`).join("")}
+</table>
 
-users[i].password=await bcrypt.hash(req.body.newPassword,10);
-saveUsers(users);
-
-res.send(page("Password updated ✅"));
+<a href="/home">Back</a>
+`));
 });
 
 // LOGOUT
@@ -257,4 +164,4 @@ app.get("/logout",(req,res)=>{
 req.session.destroy(()=>res.redirect("/login"));
 });
 
-app.listen(process.env.PORT||10000,()=>console.log("Server running"));
+app.listen(process.env.PORT||10000);
