@@ -1,4 +1,4 @@
-console.log("FINAL ENTERPRISE SYSTEM WITH PDF ✅");
+console.log("FINAL SYSTEM WITH SMART REDIRECT ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -116,12 +116,12 @@ req.session.user=user;
 res.redirect("/dashboard");
 });
 
-// DASHBOARD
+// 🔥 DASHBOARD WITH AUTO REDIRECT
 app.get("/dashboard",(req,res)=>{
 const file="output/result.xlsx";
 
 if(!fs.existsSync(file)){
-  return res.send(page("<h2>No data yet</h2>"));
+  return res.redirect("/home"); // 🔥 AUTO REDIRECT
 }
 
 const wb=xlsx.readFile(file);
