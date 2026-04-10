@@ -1,4 +1,4 @@
-console.log("ENTERPRISE SYSTEM WITH FILTERS + DB + PDF ✅");
+console.log("STABLE SYSTEM (NO DATABASE) ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -9,7 +9,6 @@ const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const xlsx = require("xlsx");
 const PDFDocument = require("pdfkit");
-const mongoose = require("mongoose");
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
@@ -23,31 +22,20 @@ app.use(session({
   saveUninitialized: false
 }));
 
-// 🔥 CONNECT MONGODB
-mongoose.connect(process.env.MONGO_URL);
-
-const RecordSchema = new mongoose.Schema({
-  agent: String,
-  van: String,
-  total: Number,
-  duplicates: Number,
-  date: { type: Date, default: Date.now }
-});
-
-const Record = mongoose.model("Record", RecordSchema);
-
 // ROOT
 app.get("/", (req,res)=>res.redirect("/login"));
 
 // USERS
 const USERS_FILE="users.json";
+
 if (!fs.existsSync(USERS_FILE)) {
   fs.writeFileSync(USERS_FILE, JSON.stringify([
     { username: "admin", password: bcrypt.hashSync("admin123",10) }
-  ]));
+  ], null, 2));
 }
 
-const getUsers=()=>JSON.parse(fs.readFileSync(USERS_FILE));
+const getUsers = () => JSON.parse(fs.readFileSync(USERS_FILE));
+const saveUsers = (u) => fs.writeFileSync(USERS_FILE, JSON.stringify(u, null, 2));
 
 // UI
 function page(content){
@@ -71,6 +59,7 @@ body{margin:0;font-family:Arial;display:flex;}
 <img src="/assets/logo.jpeg">
 <a href="/dashboard">Dashboard</a>
 <a href="/home">Upload</a>
+<a href="/change-password">Password</a>
 <a href="/logout">Logout</a>
 </div>
 
@@ -104,17 +93,23 @@ app.get("/login",(req,res)=>res.send(`
 `));
 
 app.post("/login",async(req,res)=>{
-const u=getUsers().find(x=>x.username===req.body.username);
-if(!u) return res.send("Invalid");
-if(!(await bcrypt.compare(req.body.password,u.password))) return res.send("Invalid");
-req.session.user=u;
+const user=getUsers().find(u=>u.username===req.body.username);
+if(!user) return res.send("Invalid login");
+
+const ok=await bcrypt.compare(req.body.password,user.password);
+if(!ok) return res.send("Invalid login");
+
+req.session.user=user;
 res.redirect("/dashboard");
 });
 
-// 🔥 DASHBOARD WITH FILTERS
+// DASHBOARD (WITH FILTERS)
 app.get("/dashboard",(req,res)=>{
 const file="output/result.xlsx";
-if(!fs.existsSync(file)) return res.redirect("/home");
+
+if(!fs.existsSync(file)){
+  return res.redirect("/home");
+}
 
 const wb=xlsx.readFile(file);
 let data=xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"]);
@@ -126,7 +121,6 @@ const van=req.query.van;
 if(agent) data=data.filter(r=>r.Agent===agent);
 if(van) data=data.filter(r=>r["Van Plate"]===van);
 
-// DROPDOWNS
 const agents=[...new Set(data.map(r=>r.Agent))];
 const vans=[...new Set(data.map(r=>r["Van Plate"]))];
 
@@ -164,43 +158,33 @@ ${data.map(r=>`
 
 // HOME
 app.get("/home",(req,res)=>res.send(page(`
-<h2>Upload</h2>
+<h2>Upload Reports</h2>
+
 <form action="/process" method="post" enctype="multipart/form-data">
-<input type="file" name="files"><br><br>
-<input type="file" name="files"><br><br>
+<input type="file" name="files" required><br><br>
+<input type="file" name="files" required><br><br>
 <button>Process</button>
 </form>
 `)));
 
-// 🔥 PROCESS + SAVE TO DB
+// PROCESS
 app.post("/process",upload.array("files",2),(req,res)=>{
-exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`, async ()=>{
-
-const wb=xlsx.readFile("output/result.xlsx");
-const data=xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"]);
-
-for(const r of data){
-await Record.create({
-agent:r.Agent,
-van:r["Van Plate"],
-total:r.Total,
-duplicates:r.Duplicates
-});
-}
-
+exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`,()=>{
 res.send(page(`
-<h2>Done</h2>
-<a href="/download">Excel</a><br>
-<a href="/download-pdf">PDF</a>
+<h2>Processing Complete</h2>
+
+<a href="/download">Download Excel</a><br><br>
+<a href="/download-pdf">Download PDF Report</a>
 `));
-
 });
 });
 
-// DOWNLOAD
-app.get("/download",(req,res)=>res.download("output/result.xlsx"));
+// DOWNLOAD EXCEL
+app.get("/download",(req,res)=>{
+res.download("output/result.xlsx");
+});
 
-// 🔥 PDF WITH LOGO
+// PDF
 app.get("/download-pdf",(req,res)=>{
 const doc=new PDFDocument();
 
@@ -209,15 +193,34 @@ res.setHeader("Content-Disposition","attachment; filename=report.pdf");
 
 doc.pipe(res);
 
-doc.image("logo.jpeg",200,20,{width:100});
-
-doc.moveDown(3);
-doc.fontSize(20).text("Serial Insight Report",{align:"center"});
-
+doc.fontSize(18).text("Serial Insight Report",{align:"center"});
 doc.moveDown();
-doc.text("Professional Summary");
+doc.text("Generated Report");
 
 doc.end();
+});
+
+// CHANGE PASSWORD
+app.get("/change-password",(req,res)=>res.send(page(`
+<h2>Change Password</h2>
+<form method="post">
+<input name="oldPassword" type="password"><br><br>
+<input name="newPassword" type="password"><br><br>
+<button>Update</button>
+</form>
+`)));
+
+app.post("/change-password",async(req,res)=>{
+const users=getUsers();
+const i=users.findIndex(u=>u.username===req.session.user.username);
+
+const match=await bcrypt.compare(req.body.oldPassword,users[i].password);
+if(!match) return res.send(page("Wrong password"));
+
+users[i].password=await bcrypt.hash(req.body.newPassword,10);
+saveUsers(users);
+
+res.send(page("Password updated"));
 });
 
 // LOGOUT
