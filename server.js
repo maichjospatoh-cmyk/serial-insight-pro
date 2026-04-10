@@ -24,7 +24,7 @@ app.use(session({
 }));
 
 // 🔥 CONNECT MONGODB
-mongoose.connect("mongodb+srv://admin:admin123@cluster0.xxxxx.mongodb.net/serialDB?retryWrites=true&w=majority");
+mongoose.connect(process.env.MONGO_URL);
 
 const RecordSchema = new mongoose.Schema({
   agent: String,
