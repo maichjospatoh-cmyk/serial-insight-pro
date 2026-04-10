@@ -1,4 +1,4 @@
-console.log("FINAL SYSTEM WITH SMART REDIRECT ✅");
+console.log("FINAL ENTERPRISE UI SYSTEM ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -37,7 +37,7 @@ if (!fs.existsSync(USERS_FILE)) {
 const getUsers = () => JSON.parse(fs.readFileSync(USERS_FILE));
 const saveUsers = (u) => fs.writeFileSync(USERS_FILE, JSON.stringify(u, null, 2));
 
-// UI
+// 🔥 UI WITH SIDEBAR
 function page(content){
 return `
 <html>
@@ -47,45 +47,83 @@ return `
 body{
   margin:0;
   font-family:Arial;
-  background: linear-gradient(135deg,#0f7a2f,#28a745,#0f7a2f);
   display:flex;
-  align-items:center;
-  justify-content:center;
-  height:100vh;
 }
-.card{
-  background:white;
-  padding:40px;
-  width:550px;
-  border-radius:14px;
-  text-align:center;
-}
-.logo{width:160px;margin-bottom:20px;}
-input{width:95%;padding:12px;margin:10px 0;}
-button{background:#0f7a2f;color:white;padding:12px;border:none;}
-.nav a{
-  font-size:18px;
-  margin:0 10px;
-  color:#0f7a2f;
-  font-weight:bold;
-  text-decoration:none;
-}
-.download-btn{
-  display:inline-block;
-  margin-top:10px;
-  padding:10px;
+
+/* SIDEBAR */
+.sidebar{
+  width:220px;
   background:#0f7a2f;
   color:white;
+  height:100vh;
+  padding:20px;
+  position:fixed;
+}
+
+.sidebar img{
+  width:120px;
+  display:block;
+  margin:auto;
+  margin-bottom:20px;
+}
+
+.sidebar a{
+  display:block;
+  color:white;
+  text-decoration:none;
+  margin:15px 0;
+  font-size:18px;
+}
+
+/* MAIN */
+.main{
+  margin-left:220px;
+  padding:30px;
+  width:100%;
+  background:#f4f4f4;
+  min-height:100vh;
+}
+
+.card{
+  background:white;
+  padding:25px;
+  border-radius:10px;
+}
+
+/* MOBILE */
+@media(max-width:768px){
+  .sidebar{
+    position:relative;
+    width:100%;
+    height:auto;
+  }
+  .main{
+    margin-left:0;
+  }
 }
 </style>
 </head>
+
 <body>
+
+<div class="sidebar">
+<img src="/assets/logo.jpeg">
+
+<a href="/dashboard">📊 Dashboard</a>
+<a href="/home">⬆ Upload</a>
+<a href="/change-password">🔒 Password</a>
+<a href="/logout">🚪 Logout</a>
+</div>
+
+<div class="main">
 <div class="card">
-<img src="/assets/logo.jpeg" class="logo"/>
 ${content}
 </div>
+</div>
+
 </body>
-</html>`;
+</html>
+`;
 }
 
 // AUTH
@@ -95,41 +133,50 @@ app.use((req,res,next)=>{
   next();
 });
 
-// LOGIN
-app.get("/login",(req,res)=>res.send(page(`
+// LOGIN (simple page)
+app.get("/login",(req,res)=>res.send(`
+<html>
+<body style="font-family:Arial;background:#0f7a2f;text-align:center;padding-top:100px">
+<img src="/assets/logo.jpeg" width="150"><br><br>
+
+<div style="background:white;padding:30px;width:300px;margin:auto;border-radius:10px">
 <h2>Login</h2>
 <form method="post">
-<input name="username">
-<input name="password" type="password">
+<input name="username"><br><br>
+<input name="password" type="password"><br><br>
 <button>Login</button>
 </form>
-`)));
+</div>
+
+</body>
+</html>
+`));
 
 app.post("/login",async(req,res)=>{
 const user=getUsers().find(u=>u.username===req.body.username);
-if(!user) return res.send(page("Invalid login"));
+if(!user) return res.send("Invalid login");
 
 const ok=await bcrypt.compare(req.body.password,user.password);
-if(!ok) return res.send(page("Invalid login"));
+if(!ok) return res.send("Invalid login");
 
 req.session.user=user;
 res.redirect("/dashboard");
 });
 
-// 🔥 DASHBOARD WITH AUTO REDIRECT
+// DASHBOARD (AUTO REDIRECT IF NO DATA)
 app.get("/dashboard",(req,res)=>{
 const file="output/result.xlsx";
 
 if(!fs.existsSync(file)){
-  return res.redirect("/home"); // 🔥 AUTO REDIRECT
+  return res.redirect("/home");
 }
 
 const wb=xlsx.readFile(file);
 const data=xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
 
-const total = data.length;
-const duplicates = data.filter(r=>r["duplicate_per_agent"]).length;
-const clean = total - duplicates;
+const total=data.length;
+const duplicates=data.filter(r=>r["duplicate_per_agent"]).length;
+const clean=total-duplicates;
 const quality = total ? ((clean/total)*100).toFixed(1) : 0;
 
 const agentMap={};
@@ -146,8 +193,8 @@ const ranking = Object.entries(agentMap).map(([name,val])=>{
   return {name,score:score.toFixed(1)};
 }).sort((a,b)=>b.score-a.score);
 
-const labels = Object.keys(agentMap);
-const values = Object.values(agentMap).map(v=>v.total);
+const labels=Object.keys(agentMap);
+const values=Object.values(agentMap).map(v=>v.total);
 
 res.send(page(`
 <h2>Executive Dashboard</h2>
@@ -172,11 +219,6 @@ datasets:[{data:${JSON.stringify(values)}}]
 
 <h3>Ranking</h3>
 ${ranking.map(r=>`${r.name} - ${r.score}%`).join("<br>")}
-
-<div class="nav">
-<a href="/home">Upload</a>
-<a href="/logout">Logout</a>
-</div>
 `));
 });
 
@@ -185,16 +227,10 @@ app.get("/home",(req,res)=>res.send(page(`
 <h2>Upload Reports</h2>
 
 <form action="/process" method="post" enctype="multipart/form-data">
-<input type="file" name="files" required>
-<input type="file" name="files" required>
+<input type="file" name="files" required><br><br>
+<input type="file" name="files" required><br><br>
 <button>Process</button>
 </form>
-
-<div class="nav">
-<a href="/dashboard">Dashboard</a>
-<a href="/change-password">Password</a>
-<a href="/logout">Logout</a>
-</div>
 `)));
 
 // PROCESS
@@ -205,19 +241,13 @@ res.send(page(`
 
 <a href="/download">Download Excel</a><br><br>
 <a href="/download-pdf">Download PDF Report</a>
-
-<div class="nav">
-<a href="/home">Back</a>
-</div>
 `));
 });
 });
 
 // DOWNLOAD EXCEL
 app.get("/download",(req,res)=>{
-const file=path.join(__dirname,"output","result.xlsx");
-if(!fs.existsSync(file)) return res.send(page("No file"));
-res.download(file);
+res.download("output/result.xlsx");
 });
 
 // DOWNLOAD PDF
@@ -274,8 +304,8 @@ doc.end();
 app.get("/change-password",(req,res)=>res.send(page(`
 <h2>Change Password</h2>
 <form method="post">
-<input name="oldPassword" type="password">
-<input name="newPassword" type="password">
+<input name="oldPassword" type="password"><br><br>
+<input name="newPassword" type="password"><br><br>
 <button>Update</button>
 </form>
 `)));
