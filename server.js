@@ -1,4 +1,4 @@
-console.log("ROLE-BASED SYSTEM (ADMIN + AGENT VIEW) ✅");
+console.log("AUTO EMAIL SYSTEM ACTIVE ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -8,6 +8,7 @@ const path = require("path");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const xlsx = require("xlsx");
+const nodemailer = require("nodemailer");
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
@@ -22,6 +23,21 @@ app.use(session({
 }));
 
 app.get("/", (req,res)=>res.redirect("/login"));
+
+// EMAIL CONFIG (EDIT THIS)
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "your-email@gmail.com",
+    pass: "your-app-password"
+  }
+});
+
+// MAP USERS TO EMAILS
+const agentEmails = {
+  "agent1": "agent1@gmail.com",
+  "agent2": "agent2@gmail.com"
+};
 
 const USERS_FILE = "users.json";
 
@@ -39,7 +55,6 @@ function page(content){
 return `
 <html>
 <head>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body{margin:0;font-family:Arial;background:linear-gradient(135deg,#0f7a2f,#28a745);}
 .card{background:white;padding:40px;width:520px;margin:auto;margin-top:60px;border-radius:14px;text-align:center;}
@@ -85,55 +100,22 @@ req.session.user=user;
 res.redirect("/dashboard");
 });
 
-// DASHBOARD (FILTERED)
+// DASHBOARD
 app.get("/dashboard",(req,res)=>{
-const file="output/result.xlsx";
-if(!fs.existsSync(file)) return res.send(page("No data"));
-
-const wb=xlsx.readFile(file);
-let data=xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-
-// 🔥 FILTER FOR AGENTS
-if(req.session.user.role==="agent"){
-  data=data.filter(r=>r["agent name"]===req.session.user.username);
-}
-
-// GROUP
-const map={};
-data.forEach(r=>{
-const a=r["agent name"]||"Unknown";
-map[a]=(map[a]||0)+1;
-});
-
-// CHART DATA
-const labels=Object.keys(map);
-const values=Object.values(map);
-
 res.send(page(`
-<h2>Dashboard (${req.session.user.username})</h2>
-
-<canvas id="chart"></canvas>
-
-<script>
-new Chart(document.getElementById("chart"),{
-type:"bar",
-data:{
-labels:${JSON.stringify(labels)},
-datasets:[{data:${JSON.stringify(values)}}]
-}
-});
-</script>
+<h2>Dashboard</h2>
 
 <div class="nav">
-${req.session.user.role==="admin" ? '<a href="/home">Upload</a><a href="/users">Users</a>' : ''}
+<a href="/home">Upload</a>
+<a href="/users">Users</a>
 <a href="/logout">Logout</a>
 </div>
 `));
 });
 
-// HOME (ADMIN ONLY)
+// HOME
 app.get("/home",(req,res)=>{
-if(req.session.user.role!=="admin") return res.send(page("Access denied"));
+if(req.session.user.role!=="admin") return res.send(page("Denied"));
 
 res.send(page(`
 <h2>Upload</h2>
@@ -145,12 +127,52 @@ res.send(page(`
 `));
 });
 
-// PROCESS
+// 🔥 PROCESS + EMAIL
 app.post("/process",upload.array("files",2),(req,res)=>{
-if(req.session.user.role!=="admin") return res.send("Denied");
+exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`,async()=>{
 
-exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`,()=>{
-res.send(page(`<h2>Done ✅</h2><a href="/download">Download</a>`));
+const file="output/result.xlsx";
+const wb=xlsx.readFile(file);
+const data=xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+
+// GROUP
+const agentMap={};
+
+data.forEach(r=>{
+const a=r["agent name"]||"Unknown";
+
+if(!agentMap[a]) agentMap[a]={total:0,duplicates:0};
+
+agentMap[a].total++;
+if(r["duplicate_per_agent"]) agentMap[a].duplicates++;
+});
+
+// SEND EMAILS
+for(const agent in agentMap){
+
+if(!agentEmails[agent]) continue;
+
+const info=agentMap[agent];
+
+await transporter.sendMail({
+from:"your-email@gmail.com",
+to:agentEmails[agent],
+subject:"Your Performance Report",
+text:`Hello ${agent}
+
+Total Lines: ${info.total}
+Duplicates: ${info.duplicates}
+
+Keep improving!`
+});
+
+}
+
+res.send(page(`
+<h2>Processed & Emails Sent ✅</h2>
+<a href="/download">Download</a>
+`));
+
 });
 });
 
@@ -171,8 +193,8 @@ res.send(page(`
 <h2>Users</h2>
 
 <form method="post">
-<input name="username" placeholder="Username">
-<input name="password" placeholder="Password">
+<input name="username">
+<input name="password">
 <select name="role">
 <option value="agent">Agent</option>
 <option value="admin">Admin</option>
@@ -181,10 +203,6 @@ res.send(page(`
 </form>
 
 <pre>${JSON.stringify(users,null,2)}</pre>
-
-<div class="nav">
-<a href="/dashboard">Back</a>
-</div>
 `));
 });
 
