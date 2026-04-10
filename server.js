@@ -1,4 +1,4 @@
-console.log("AUTO DAILY SYSTEM ACTIVE ✅");
+console.log("STABLE SYSTEM (NO CRON) ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -8,8 +8,6 @@ const path = require("path");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const xlsx = require("xlsx");
-const nodemailer = require("nodemailer");
-const cron = require("node-cron");
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
@@ -23,132 +21,213 @@ app.use(session({
   saveUninitialized: false
 }));
 
-app.get("/", (req,res)=>res.redirect("/login"));
+// ROOT FIX
+app.get("/", (req, res) => res.redirect("/login"));
 
-// EMAIL CONFIG
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: "your-email@gmail.com",
-    pass: "your-app-password"
-  }
-});
+// USERS FILE
+const USERS_FILE = "users.json";
 
-const agentEmails = {
-  "agent1": "agent1@gmail.com",
-  "agent2": "agent2@gmail.com"
-};
-
-// AUTO PROCESS FUNCTION
-async function runAutoProcess(){
-
-  console.log("Running scheduled job...");
-
-  const file1="auto/file1.xlsx";
-  const file2="auto/file2.xlsx";
-
-  if(!fs.existsSync(file1) || !fs.existsSync(file2)){
-    console.log("Auto files missing");
-    return;
-  }
-
-  exec(`python3 processor/compare.py ${file1} ${file2}`, async ()=>{
-
-    const wb=xlsx.readFile("output/result.xlsx");
-    const data=xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-
-    const agentMap={};
-
-    data.forEach(r=>{
-      const a=r["agent name"]||"Unknown";
-      if(!agentMap[a]) agentMap[a]={total:0,duplicates:0};
-      agentMap[a].total++;
-      if(r["duplicate_per_agent"]) agentMap[a].duplicates++;
-    });
-
-    for(const agent in agentMap){
-      if(!agentEmails[agent]) continue;
-
-      const info=agentMap[agent];
-
-      await transporter.sendMail({
-        from:"your-email@gmail.com",
-        to:agentEmails[agent],
-        subject:"Daily Report",
-        text:`Agent: ${agent}
-
-Total: ${info.total}
-Duplicates: ${info.duplicates}`
-      });
-    }
-
-    console.log("Emails sent");
-  });
+if (!fs.existsSync(USERS_FILE)) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify([
+    { username: "admin", password: bcrypt.hashSync("admin123",10), role: "admin" }
+  ], null, 2));
 }
 
-// 🔥 RUN EVERY DAY AT 18:00
-cron.schedule("0 18 * * *", runAutoProcess);
+const getUsers = () => JSON.parse(fs.readFileSync(USERS_FILE));
+const saveUsers = (u) => fs.writeFileSync(USERS_FILE, JSON.stringify(u, null, 2));
 
-// UI
+// 🎨 UI
 function page(content){
 return `
 <html>
-<body style="text-align:center;font-family:Arial;background:linear-gradient(135deg,#0f7a2f,#28a745);padding-top:80px">
-<img src="/assets/logo.jpeg" width="120"><br><br>
-<div style="background:white;padding:20px;width:400px;margin:auto;border-radius:10px">
+<head>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{
+  margin:0;
+  font-family:Arial;
+  background: linear-gradient(135deg,#0f7a2f,#28a745,#0f7a2f);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  height:100vh;
+}
+.card{
+  background:white;
+  padding:40px;
+  width:520px;
+  border-radius:14px;
+  text-align:center;
+}
+.logo{width:150px;margin-bottom:20px;}
+input{width:95%;padding:12px;margin:10px 0;}
+button{background:#0f7a2f;color:white;padding:12px;border:none;}
+.nav a{
+  font-size:18px;
+  margin:0 10px;
+  color:#0f7a2f;
+  font-weight:bold;
+  text-decoration:none;
+}
+.download-btn{
+  display:inline-block;
+  margin-top:10px;
+  padding:10px;
+  background:#0f7a2f;
+  color:white;
+}
+</style>
+</head>
+<body>
+<div class="card">
+<img src="/assets/logo.jpeg" class="logo"/>
 ${content}
 </div>
 </body>
 </html>`;
 }
 
-// AUTH
+// 🔐 AUTH
 app.use((req,res,next)=>{
-  if(req.path==="/login") return next();
+  if(req.path === "/login") return next();
   if(!req.session.user) return res.redirect("/login");
   next();
 });
 
 // LOGIN
-const USERS_FILE="users.json";
-if(!fs.existsSync(USERS_FILE)){
-fs.writeFileSync(USERS_FILE,JSON.stringify([
-{username:"admin",password:bcrypt.hashSync("admin123",10),role:"admin"}
-]));
-}
-
-const getUsers=()=>JSON.parse(fs.readFileSync(USERS_FILE));
-
 app.get("/login",(req,res)=>res.send(page(`
 <h2>Login</h2>
 <form method="post">
-<input name="username"><br><br>
-<input type="password" name="password"><br><br>
+<input name="username">
+<input name="password" type="password">
 <button>Login</button>
 </form>
 `)));
 
 app.post("/login",async(req,res)=>{
 const user=getUsers().find(u=>u.username===req.body.username);
-if(!user) return res.send("Invalid");
+if(!user) return res.send(page("Invalid login"));
 
-if(!(await bcrypt.compare(req.body.password,user.password))) return res.send("Invalid");
+const ok=await bcrypt.compare(req.body.password,user.password);
+if(!ok) return res.send(page("Invalid login"));
 
 req.session.user=user;
 res.redirect("/dashboard");
 });
 
 // DASHBOARD
-app.get("/dashboard",(req,res)=>res.send(page(`
-<h2>System Running Automatically ✅</h2>
+app.get("/dashboard",(req,res)=>{
+const file="output/result.xlsx";
 
-<p>No manual upload needed</p>
+if(!fs.existsSync(file)){
+  return res.send(page(`
+    <h2>Dashboard</h2>
+    <p>No data yet</p>
+    <div class="nav">
+      <a href="/home">Upload</a>
+      <a href="/logout">Logout</a>
+    </div>
+  `));
+}
 
+const wb=xlsx.readFile(file);
+const data=xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+
+const map={};
+data.forEach(r=>{
+  const a=r["agent name"]||"Unknown";
+  map[a]=(map[a]||0)+1;
+});
+
+const labels=Object.keys(map);
+const values=Object.values(map);
+
+res.send(page(`
+<h2>Dashboard</h2>
+
+<canvas id="chart"></canvas>
+
+<script>
+new Chart(document.getElementById("chart"),{
+type:"bar",
+data:{
+labels:${JSON.stringify(labels)},
+datasets:[{data:${JSON.stringify(values)}}]
+}
+});
+</script>
+
+<div class="nav">
+<a href="/home">Upload</a>
 <a href="/logout">Logout</a>
+</div>
+`));
+});
+
+// HOME
+app.get("/home",(req,res)=>res.send(page(`
+<h2>Upload Reports</h2>
+
+<form action="/process" method="post" enctype="multipart/form-data">
+<input type="file" name="files" required>
+<input type="file" name="files" required>
+<button>Process</button>
+</form>
+
+<div class="nav">
+<a href="/dashboard">Dashboard</a>
+<a href="/change-password">Password</a>
+<a href="/logout">Logout</a>
+</div>
 `)));
 
+// PROCESS
+app.post("/process",upload.array("files",2),(req,res)=>{
+exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`,()=>{
+res.send(page(`
+<h2>Processing Complete ✅</h2>
+<a href="/download" class="download-btn">Download Excel</a>
+
+<div class="nav">
+<a href="/home">Back</a>
+</div>
+`));
+});
+});
+
+// DOWNLOAD
+app.get("/download",(req,res)=>{
+const file=path.join(__dirname,"output","result.xlsx");
+if(!fs.existsSync(file)) return res.send(page("No file"));
+res.download(file);
+});
+
+// CHANGE PASSWORD
+app.get("/change-password",(req,res)=>res.send(page(`
+<h2>Change Password</h2>
+<form method="post">
+<input name="oldPassword" type="password">
+<input name="newPassword" type="password">
+<button>Update</button>
+</form>
+`)));
+
+app.post("/change-password",async(req,res)=>{
+const users=getUsers();
+const i=users.findIndex(u=>u.username===req.session.user.username);
+
+const match=await bcrypt.compare(req.body.oldPassword,users[i].password);
+if(!match) return res.send(page("Wrong password"));
+
+users[i].password=await bcrypt.hash(req.body.newPassword,10);
+saveUsers(users);
+
+res.send(page("Password updated ✅"));
+});
+
+// LOGOUT
 app.get("/logout",(req,res)=>{
 req.session.destroy(()=>res.redirect("/login"));
 });
 
-app.listen(process.env.PORT||10000,()=>console.log("Running"));
+app.listen(process.env.PORT||10000,()=>console.log("Server running"));
