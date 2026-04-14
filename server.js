@@ -1,10 +1,9 @@
-console.log("STABLE SYSTEM WITH ERROR HANDLING ✅");
+console.log("FINAL SYSTEM WITH DOWNLOAD FIX ✅");
 
 const express = require("express");
 const multer = require("multer");
 const { exec } = require("child_process");
 const fs = require("fs");
-const path = require("path");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const xlsx = require("xlsx");
@@ -16,47 +15,43 @@ const upload = multer({ dest: "uploads/" });
 app.use(express.urlencoded({ extended: true }));
 app.use("/assets", express.static("."));
 
-// 🔥 ENSURE FOLDERS EXIST
+// CREATE FOLDERS
 if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
 if (!fs.existsSync("output")) fs.mkdirSync("output");
 if (!fs.existsSync("history")) fs.mkdirSync("history");
 
+// SESSION
 app.use(session({
   secret: "secret-key",
   resave: false,
   saveUninitialized: false
 }));
 
-// 🔥 ROOT FIX
-app.get("/", (req, res) => {
-  res.redirect("/login");
-});
+// ROOT
+app.get("/", (req, res) => res.redirect("/login"));
 
-// 🔥 EMAIL SETUP (SAFE)
+// EMAIL (SAFE)
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "yourgmail@gmail.com", // change
-    pass: "your_app_password"    // change
+    user: "yourgmail@gmail.com",
+    pass: "your_app_password"
   }
 });
 
 // USERS
-const USERS_FILE="users.json";
+const USERS_FILE = "users.json";
+
 if (!fs.existsSync(USERS_FILE)) {
   fs.writeFileSync(USERS_FILE, JSON.stringify([
     { username: "admin", password: bcrypt.hashSync("admin123",10), role:"admin" }
   ], null, 2));
 }
 
-const getUsers=()=>JSON.parse(fs.readFileSync(USERS_FILE));
-const saveUsers=(u)=>fs.writeFileSync(USERS_FILE, JSON.stringify(u,null,2));
+const getUsers = () => JSON.parse(fs.readFileSync(USERS_FILE));
+const saveUsers = (u) => fs.writeFileSync(USERS_FILE, JSON.stringify(u,null,2));
 
-function isAdmin(req){
-  return req.session.user?.role === "admin";
-}
-
-// UI
+// UI TEMPLATE
 function page(content){
 return `
 <html>
@@ -70,6 +65,7 @@ body{margin:0;font-family:Arial;display:flex;}
 .main{margin-left:220px;padding:20px;width:100%;background:#f4f4f4;}
 .card{background:white;padding:20px;border-radius:10px;margin-bottom:20px;}
 .toast{background:green;color:white;padding:10px;margin-bottom:10px;}
+.btn{display:inline-block;padding:10px 15px;background:#0f7a2f;color:white;text-decoration:none;border-radius:6px;margin:5px 0;}
 @media(max-width:768px){
   .sidebar{position:relative;width:100%;height:auto;}
   .main{margin-left:0;}
@@ -83,7 +79,6 @@ body{margin:0;font-family:Arial;display:flex;}
 <img src="/assets/logo.jpeg">
 <a href="/dashboard">Dashboard</a>
 <a href="/home">Upload</a>
-${global.user?.role==="admin" ? `<a href="/users">Users</a>` : ``}
 <a href="/logout">Logout</a>
 </div>
 
@@ -99,7 +94,6 @@ ${content}
 app.use((req,res,next)=>{
   if(req.path==="/login") return next();
   if(!req.session.user) return res.redirect("/login");
-  global.user=req.session.user;
   next();
 });
 
@@ -132,10 +126,26 @@ if(!fs.existsSync("output/result.xlsx")){
   return res.redirect("/home");
 }
 
+const wb=xlsx.readFile("output/result.xlsx");
+const data=xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"]);
+
 res.send(page(`
 <div class="card">
-<h2>Dashboard Ready</h2>
-<p>Upload and process files to see results</p>
+<h2>Dashboard</h2>
+
+<table border="1" width="100%">
+<tr><th>Agent</th><th>Van</th><th>Total</th><th>Duplicates</th><th>Quality</th></tr>
+${data.map(r=>`
+<tr>
+<td>${r.Agent}</td>
+<td>${r["Van Plate"]}</td>
+<td>${r.Total}</td>
+<td style="color:red">${r.Duplicates}</td>
+<td>${r["Quality %"]}%</td>
+</tr>
+`).join("")}
+</table>
+
 </div>
 `));
 });
@@ -154,7 +164,7 @@ app.get("/home",(req,res)=>res.send(page(`
 </div>
 `)));
 
-// 🔥 FIXED PROCESS ROUTE
+// PROCESS (FIXED)
 app.post("/process", upload.array("files", 2), (req, res) => {
 
   if (!req.files || req.files.length < 2) {
@@ -167,9 +177,6 @@ app.post("/process", upload.array("files", 2), (req, res) => {
   exec(`python3 processor/compare.py ${file1} ${file2}`, async (err, stdout, stderr) => {
 
     if (err) {
-      console.error("PYTHON ERROR:", err);
-      console.error(stderr);
-
       return res.send(page(`
         <div class="card">
         ❌ Processing failed<br><br>
@@ -181,8 +188,7 @@ app.post("/process", upload.array("files", 2), (req, res) => {
     if (!fs.existsSync("output/result.xlsx")) {
       return res.send(page(`
         <div class="card">
-        ❌ Output file missing<br>
-        Check Python script
+        ❌ Output file missing
         </div>
       `));
     }
@@ -192,7 +198,6 @@ app.post("/process", upload.array("files", 2), (req, res) => {
 
     fs.copyFileSync("output/result.xlsx", filePath);
 
-    // EMAIL SAFE
     try {
       await transporter.sendMail({
         from: "yourgmail@gmail.com",
@@ -207,53 +212,22 @@ app.post("/process", upload.array("files", 2), (req, res) => {
 
     res.send(page(`
       <div class="toast">✅ Processed successfully</div>
+
       <div class="card">
-      <h2>Success</h2>
-      <a href="/dashboard">Go Dashboard</a>
+        <h2>Download Report</h2>
+
+        <a href="/download" class="btn">📥 Download Excel</a><br>
+        <a href="/dashboard" class="btn">📊 View Dashboard</a>
       </div>
     `));
+
   });
 
 });
 
-// USERS
-app.get("/users",(req,res)=>{
-if(!isAdmin(req)) return res.send("Access denied");
-
-const users=getUsers();
-
-res.send(page(`
-<div class="card">
-<h2>Users</h2>
-
-<form method="post">
-<input name="username"><br><br>
-<input name="password" type="password"><br><br>
-<select name="role">
-<option value="agent">Agent</option>
-<option value="admin">Admin</option>
-</select><br><br>
-<button>Add</button>
-</form>
-
-<hr>
-
-${users.map(u=>`${u.username} (${u.role})<br>`).join("")}
-</div>
-`));
-});
-
-app.post("/users",async(req,res)=>{
-const users=getUsers();
-
-users.push({
-username:req.body.username,
-password:await bcrypt.hash(req.body.password,10),
-role:req.body.role
-});
-
-saveUsers(users);
-res.redirect("/users");
+// DOWNLOAD
+app.get("/download",(req,res)=>{
+  res.download("output/result.xlsx");
 });
 
 // LOGOUT
