@@ -28,8 +28,8 @@ if (!fs.existsSync("history")) fs.mkdirSync("history");
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "yourgmail@gmail.com",
-    pass: "your_app_password"
+    user: "maichjospatoh@gmail.com",
+    pass: "admin123"
   }
 });
 
