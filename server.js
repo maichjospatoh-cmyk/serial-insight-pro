@@ -11,6 +11,9 @@ const xlsx = require("xlsx");
 const nodemailer = require("nodemailer");
 
 const app = express();
+app.get("/", (req, res) => {
+  res.redirect("/login");
+});
 const upload = multer({ dest: "uploads/" });
 
 app.use(express.urlencoded({ extended: true }));
