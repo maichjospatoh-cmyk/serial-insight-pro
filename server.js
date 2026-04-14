@@ -1,4 +1,4 @@
-console.log("ULTIMATE SYSTEM (EMAIL + MOBILE + ROLES) ✅");
+console.log("STABLE SYSTEM WITH ERROR HANDLING ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -11,13 +11,15 @@ const xlsx = require("xlsx");
 const nodemailer = require("nodemailer");
 
 const app = express();
-app.get("/", (req, res) => {
-  res.redirect("/login");
-});
 const upload = multer({ dest: "uploads/" });
 
 app.use(express.urlencoded({ extended: true }));
 app.use("/assets", express.static("."));
+
+// 🔥 ENSURE FOLDERS EXIST
+if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
+if (!fs.existsSync("output")) fs.mkdirSync("output");
+if (!fs.existsSync("history")) fs.mkdirSync("history");
 
 app.use(session({
   secret: "secret-key",
@@ -25,14 +27,17 @@ app.use(session({
   saveUninitialized: false
 }));
 
-if (!fs.existsSync("history")) fs.mkdirSync("history");
+// 🔥 ROOT FIX
+app.get("/", (req, res) => {
+  res.redirect("/login");
+});
 
-// EMAIL SETUP (PUT YOUR EMAIL)
+// 🔥 EMAIL SETUP (SAFE)
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "maichjospatoh@gmail.com",
-    pass: "admin123"
+    user: "yourgmail@gmail.com", // change
+    pass: "your_app_password"    // change
   }
 });
 
@@ -57,88 +62,17 @@ return `
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="5">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <style>
 body{margin:0;font-family:Arial;display:flex;}
-
-.sidebar{
-  width:240px;
-  background:#0f7a2f;
-  color:white;
-  height:100vh;
-  padding:20px;
-  position:fixed;
-}
-
-.sidebar img{
-  width:140px;
-  display:block;
-  margin:auto;
-  margin-bottom:20px;
-}
-
-.sidebar a{
-  display:block;
-  color:white;
-  margin:12px 0;
-  text-decoration:none;
-  font-size:18px;
-}
-
-.main{
-  margin-left:240px;
-  padding:20px;
-  width:100%;
-  background:#f4f4f4;
-}
-
-.card{
-  background:white;
-  padding:20px;
-  border-radius:12px;
-  margin-bottom:20px;
-}
-
-.cards{
-  display:flex;
-  gap:20px;
-  flex-wrap:wrap;
-}
-
-.kpi{
-  flex:1;
-  background:#0f7a2f;
-  color:white;
-  padding:20px;
-  border-radius:12px;
-  text-align:center;
-}
-
-.toast{
-  position:fixed;
-  top:20px;
-  right:20px;
-  background:#28a745;
-  color:white;
-  padding:15px;
-  border-radius:8px;
-}
-
-/* MOBILE */
+.sidebar{width:220px;background:#0f7a2f;color:white;height:100vh;padding:20px;position:fixed;}
+.sidebar img{width:120px;margin:auto;display:block;margin-bottom:20px;}
+.sidebar a{display:block;color:white;margin:10px 0;text-decoration:none;}
+.main{margin-left:220px;padding:20px;width:100%;background:#f4f4f4;}
+.card{background:white;padding:20px;border-radius:10px;margin-bottom:20px;}
+.toast{background:green;color:white;padding:10px;margin-bottom:10px;}
 @media(max-width:768px){
-  .sidebar{
-    position:relative;
-    width:100%;
-    height:auto;
-  }
-  .main{
-    margin-left:0;
-  }
-  .cards{
-    flex-direction:column;
-  }
+  .sidebar{position:relative;width:100%;height:auto;}
+  .main{margin-left:0;}
 }
 </style>
 </head>
@@ -150,7 +84,6 @@ body{margin:0;font-family:Arial;display:flex;}
 <a href="/dashboard">Dashboard</a>
 <a href="/home">Upload</a>
 ${global.user?.role==="admin" ? `<a href="/users">Users</a>` : ``}
-<a href="/email">Email</a>
 <a href="/logout">Logout</a>
 </div>
 
@@ -184,10 +117,10 @@ app.get("/login",(req,res)=>res.send(`
 
 app.post("/login",async(req,res)=>{
 const u=getUsers().find(x=>x.username===req.body.username);
-if(!u) return res.send("Invalid");
+if(!u) return res.send("Invalid login");
 
 if(!(await bcrypt.compare(req.body.password,u.password)))
-  return res.send("Invalid");
+  return res.send("Invalid login");
 
 req.session.user=u;
 res.redirect("/dashboard");
@@ -195,47 +128,92 @@ res.redirect("/dashboard");
 
 // DASHBOARD
 app.get("/dashboard",(req,res)=>{
-const file="output/result.xlsx";
-if(!fs.existsSync(file)) return res.redirect("/home");
-
-const wb=xlsx.readFile(file);
-const data=xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"]);
-
-const total=data.reduce((a,b)=>a+b.Total,0);
-const dup=data.reduce((a,b)=>a+b.Duplicates,0);
-const quality=((total-dup)/total*100||0).toFixed(1);
-
-const labels=data.map(r=>r.Agent);
-const values=data.map(r=>r.Total);
+if(!fs.existsSync("output/result.xlsx")){
+  return res.redirect("/home");
+}
 
 res.send(page(`
-<div class="cards">
-<div class="kpi"><h3>Total</h3><h1>${total}</h1></div>
-<div class="kpi"><h3>Duplicates</h3><h1>${dup}</h1></div>
-<div class="kpi"><h3>Quality</h3><h1>${quality}%</h1></div>
-</div>
-
 <div class="card">
-<canvas id="chart"></canvas>
+<h2>Dashboard Ready</h2>
+<p>Upload and process files to see results</p>
 </div>
-
-<script>
-new Chart(document.getElementById("chart"),{
-type:"bar",
-data:{labels:${JSON.stringify(labels)},datasets:[{data:${JSON.stringify(values)}}]}
-});
-</script>
 `));
 });
 
-// EMAIL PAGE
-app.get("/email",(req,res)=>{
-res.send(page(`
+// HOME
+app.get("/home",(req,res)=>res.send(page(`
 <div class="card">
-<h2>Email Report</h2>
-<p>Email will be sent automatically after processing</p>
+<h2>Upload Files</h2>
+
+<form action="/process" method="post" enctype="multipart/form-data">
+<input type="file" name="files" required><br><br>
+<input type="file" name="files" required><br><br>
+<button>Process</button>
+</form>
+
 </div>
-`));
+`)));
+
+// 🔥 FIXED PROCESS ROUTE
+app.post("/process", upload.array("files", 2), (req, res) => {
+
+  if (!req.files || req.files.length < 2) {
+    return res.send(page(`<div class="card">❌ Upload 2 files</div>`));
+  }
+
+  const file1 = req.files[0].path;
+  const file2 = req.files[1].path;
+
+  exec(`python3 processor/compare.py ${file1} ${file2}`, async (err, stdout, stderr) => {
+
+    if (err) {
+      console.error("PYTHON ERROR:", err);
+      console.error(stderr);
+
+      return res.send(page(`
+        <div class="card">
+        ❌ Processing failed<br><br>
+        ${stderr || err.message}
+        </div>
+      `));
+    }
+
+    if (!fs.existsSync("output/result.xlsx")) {
+      return res.send(page(`
+        <div class="card">
+        ❌ Output file missing<br>
+        Check Python script
+        </div>
+      `));
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g,"-");
+    const filePath = `history/report-${timestamp}.xlsx`;
+
+    fs.copyFileSync("output/result.xlsx", filePath);
+
+    // EMAIL SAFE
+    try {
+      await transporter.sendMail({
+        from: "yourgmail@gmail.com",
+        to: "receiver@email.com",
+        subject: "Report",
+        text: "Attached",
+        attachments: [{ path: filePath }]
+      });
+    } catch(e) {
+      console.log("Email error:", e);
+    }
+
+    res.send(page(`
+      <div class="toast">✅ Processed successfully</div>
+      <div class="card">
+      <h2>Success</h2>
+      <a href="/dashboard">Go Dashboard</a>
+      </div>
+    `));
+  });
+
 });
 
 // USERS
@@ -277,51 +255,6 @@ role:req.body.role
 saveUsers(users);
 res.redirect("/users");
 });
-
-// PROCESS + EMAIL + HISTORY
-app.post("/process",upload.array("files",2),(req,res)=>{
-exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`, async ()=>{
-
-const timestamp=new Date().toISOString().replace(/[:.]/g,"-");
-const filePath=`history/report-${timestamp}.xlsx`;
-
-fs.copyFileSync("output/result.xlsx",filePath);
-
-// SEND EMAIL
-try{
-await transporter.sendMail({
-  from:"yourgmail@gmail.com",
-  to:"receiver@email.com",
-  subject:"Daily Serial Report",
-  text:"Attached report",
-  attachments:[{path:filePath}]
-});
-}catch(e){
-console.log("Email failed",e);
-}
-
-res.send(page(`
-<div class="toast">Report processed & email sent</div>
-
-<div class="card">
-<h2>Done</h2>
-<a href="/dashboard">Go Dashboard</a>
-</div>
-`));
-});
-});
-
-// HOME
-app.get("/home",(req,res)=>res.send(page(`
-<div class="card">
-<h2>Upload</h2>
-<form action="/process" method="post" enctype="multipart/form-data">
-<input type="file" name="files"><br><br>
-<input type="file" name="files"><br><br>
-<button>Process</button>
-</form>
-</div>
-`)));
 
 // LOGOUT
 app.get("/logout",(req,res)=>{
