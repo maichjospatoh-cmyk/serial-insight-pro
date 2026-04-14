@@ -1,4 +1,4 @@
-console.log("ELITE SYSTEM (ROLES + EMAIL + REALTIME) ✅");
+console.log("ULTIMATE SYSTEM (EMAIL + MOBILE + ROLES) ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -8,6 +8,7 @@ const path = require("path");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const xlsx = require("xlsx");
+const nodemailer = require("nodemailer");
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
@@ -23,6 +24,15 @@ app.use(session({
 
 if (!fs.existsSync("history")) fs.mkdirSync("history");
 
+// EMAIL SETUP (PUT YOUR EMAIL)
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "yourgmail@gmail.com",
+    pass: "your_app_password"
+  }
+});
+
 // USERS
 const USERS_FILE="users.json";
 if (!fs.existsSync(USERS_FILE)) {
@@ -34,7 +44,6 @@ if (!fs.existsSync(USERS_FILE)) {
 const getUsers=()=>JSON.parse(fs.readFileSync(USERS_FILE));
 const saveUsers=(u)=>fs.writeFileSync(USERS_FILE, JSON.stringify(u,null,2));
 
-// ROLE CHECK
 function isAdmin(req){
   return req.session.user?.role === "admin";
 }
@@ -44,17 +53,90 @@ function page(content){
 return `
 <html>
 <head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="5">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
 body{margin:0;font-family:Arial;display:flex;}
-.sidebar{width:240px;background:#0f7a2f;color:white;height:100vh;padding:20px;position:fixed;}
-.sidebar img{width:140px;margin:auto;display:block;margin-bottom:20px;}
-.sidebar a{display:block;color:white;margin:12px 0;text-decoration:none;font-size:18px;}
-.main{margin-left:240px;padding:30px;width:100%;background:#f4f4f4;}
-.card{background:white;padding:20px;border-radius:12px;margin-bottom:20px;}
-.cards{display:flex;gap:20px;}
-.kpi{flex:1;background:#0f7a2f;color:white;padding:20px;border-radius:12px;text-align:center;}
+
+.sidebar{
+  width:240px;
+  background:#0f7a2f;
+  color:white;
+  height:100vh;
+  padding:20px;
+  position:fixed;
+}
+
+.sidebar img{
+  width:140px;
+  display:block;
+  margin:auto;
+  margin-bottom:20px;
+}
+
+.sidebar a{
+  display:block;
+  color:white;
+  margin:12px 0;
+  text-decoration:none;
+  font-size:18px;
+}
+
+.main{
+  margin-left:240px;
+  padding:20px;
+  width:100%;
+  background:#f4f4f4;
+}
+
+.card{
+  background:white;
+  padding:20px;
+  border-radius:12px;
+  margin-bottom:20px;
+}
+
+.cards{
+  display:flex;
+  gap:20px;
+  flex-wrap:wrap;
+}
+
+.kpi{
+  flex:1;
+  background:#0f7a2f;
+  color:white;
+  padding:20px;
+  border-radius:12px;
+  text-align:center;
+}
+
+.toast{
+  position:fixed;
+  top:20px;
+  right:20px;
+  background:#28a745;
+  color:white;
+  padding:15px;
+  border-radius:8px;
+}
+
+/* MOBILE */
+@media(max-width:768px){
+  .sidebar{
+    position:relative;
+    width:100%;
+    height:auto;
+  }
+  .main{
+    margin-left:0;
+  }
+  .cards{
+    flex-direction:column;
+  }
+}
 </style>
 </head>
 
@@ -64,10 +146,7 @@ body{margin:0;font-family:Arial;display:flex;}
 <img src="/assets/logo.jpeg">
 <a href="/dashboard">Dashboard</a>
 <a href="/home">Upload</a>
-${isAdmin({session:{user:global.user||{}}}) ? `
-<a href="/history">History</a>
-<a href="/users">Users</a>
-` : ``}
+${global.user?.role==="admin" ? `<a href="/users">Users</a>` : ``}
 <a href="/email">Email</a>
 <a href="/logout">Logout</a>
 </div>
@@ -111,7 +190,7 @@ req.session.user=u;
 res.redirect("/dashboard");
 });
 
-// DASHBOARD (REAL-TIME)
+// DASHBOARD
 app.get("/dashboard",(req,res)=>{
 const file="output/result.xlsx";
 if(!fs.existsSync(file)) return res.redirect("/home");
@@ -134,11 +213,11 @@ res.send(page(`
 </div>
 
 <div class="card">
-<canvas id="bar"></canvas>
+<canvas id="chart"></canvas>
 </div>
 
 <script>
-new Chart(document.getElementById("bar"),{
+new Chart(document.getElementById("chart"),{
 type:"bar",
 data:{labels:${JSON.stringify(labels)},datasets:[{data:${JSON.stringify(values)}}]}
 });
@@ -146,24 +225,17 @@ data:{labels:${JSON.stringify(labels)},datasets:[{data:${JSON.stringify(values)}
 `));
 });
 
-// EMAIL PAGE (AUTO CONTENT)
+// EMAIL PAGE
 app.get("/email",(req,res)=>{
 res.send(page(`
 <div class="card">
 <h2>Email Report</h2>
-<textarea style="width:100%;height:200px;">
-Subject: Daily Serial Report
-
-Attached is today's performance report.
-
-Regards,
-System
-</textarea>
+<p>Email will be sent automatically after processing</p>
 </div>
 `));
 });
 
-// USERS (ADMIN ONLY)
+// USERS
 app.get("/users",(req,res)=>{
 if(!isAdmin(req)) return res.send("Access denied");
 
@@ -203,12 +275,36 @@ saveUsers(users);
 res.redirect("/users");
 });
 
-// PROCESS
+// PROCESS + EMAIL + HISTORY
 app.post("/process",upload.array("files",2),(req,res)=>{
-exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`,()=>{
+exec(`python3 processor/compare.py ${req.files[0].path} ${req.files[1].path}`, async ()=>{
+
 const timestamp=new Date().toISOString().replace(/[:.]/g,"-");
-fs.copyFileSync("output/result.xlsx",`history/report-${timestamp}.xlsx`);
-res.redirect("/dashboard");
+const filePath=`history/report-${timestamp}.xlsx`;
+
+fs.copyFileSync("output/result.xlsx",filePath);
+
+// SEND EMAIL
+try{
+await transporter.sendMail({
+  from:"yourgmail@gmail.com",
+  to:"receiver@email.com",
+  subject:"Daily Serial Report",
+  text:"Attached report",
+  attachments:[{path:filePath}]
+});
+}catch(e){
+console.log("Email failed",e);
+}
+
+res.send(page(`
+<div class="toast">Report processed & email sent</div>
+
+<div class="card">
+<h2>Done</h2>
+<a href="/dashboard">Go Dashboard</a>
+</div>
+`));
 });
 });
 
