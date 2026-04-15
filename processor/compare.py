@@ -3,7 +3,6 @@ import sys
 import re
 import os
 
-# ensure output folder exists
 if not os.path.exists("output"):
     os.makedirs("output")
 
@@ -29,27 +28,20 @@ df2["serial"] = df2.apply(
     axis=1
 )
 
-# DROP EMPTY SERIALS
 df1 = df1.dropna(subset=["serial"])
 df2 = df2.dropna(subset=["serial"])
 
-# 🔥 EXTRACT AGENT + VAN FROM COLUMN
+# EXTRACT AGENT + VAN
 def extract_agent_van(val):
     if pd.isna(val):
         return ("Unknown", "Unknown")
 
     text = str(val)
-
     parts = text.split()
 
     if len(parts) >= 2:
-        agent = parts[0]
-        van = parts[-1]
-    else:
-        agent = text
-        van = "Unknown"
-
-    return (agent, van)
+        return (parts[0], parts[-1])
+    return (text, "Unknown")
 
 if "BA NAME &VAN" in df1.columns:
     df1[["Agent", "Van Plate"]] = df1["BA NAME &VAN"].apply(
@@ -59,14 +51,19 @@ else:
     df1["Agent"] = "Unknown"
     df1["Van Plate"] = "Unknown"
 
-# REMOVE DUPLICATES
+# 🔥 DETECT INTERNAL DUPLICATES
+df1["Internal Duplicate"] = df1.duplicated(subset=["serial"], keep=False)
+
+# REMOVE UNIQUE LISTS
 df1_unique = df1.drop_duplicates(subset=["serial"])
 df2_unique = df2.drop_duplicates(subset=["serial"])
 
-# FIND COMMON SERIALS
+# 🔥 CROSS FILE DUPLICATES
 common = set(df1_unique["serial"]).intersection(set(df2_unique["serial"]))
+df1_unique["Cross Duplicate"] = df1_unique["serial"].apply(lambda x: x in common)
 
-df1_unique["Duplicate"] = df1_unique["serial"].apply(lambda x: x in common)
+# TOTAL DUPLICATE FLAG
+df1_unique["Duplicate"] = df1_unique["Cross Duplicate"]
 
 # GROUP
 summary = df1_unique.groupby(["Agent", "Van Plate"]).agg(
@@ -74,13 +71,24 @@ summary = df1_unique.groupby(["Agent", "Van Plate"]).agg(
     Duplicates=("Duplicate", "sum")
 ).reset_index()
 
+# QUALITY
 summary["Quality %"] = ((summary["Total"] - summary["Duplicates"]) / summary["Total"] * 100).round(1)
 
-# SAVE OUTPUT
+# 🚨 FLAG SUSPICIOUS
+summary["Flag"] = summary["Quality %"].apply(
+    lambda q: "⚠️ Suspicious" if q < 80 else "✅ Good"
+)
+
+# 🏆 RANK AGENTS
+summary = summary.sort_values(by="Quality %", ascending=False)
+summary["Rank"] = range(1, len(summary) + 1)
+
+# SAVE
 output_file = "output/result.xlsx"
 
 with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
+    df1.to_excel(writer, sheet_name="Raw with Flags", index=False)
     df1_unique.to_excel(writer, sheet_name="Cleaned", index=False)
     summary.to_excel(writer, sheet_name="Dashboard", index=False)
 
-print("Processing complete ✅")
+print("Advanced Processing Complete ✅")
