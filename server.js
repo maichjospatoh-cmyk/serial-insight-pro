@@ -1,4 +1,4 @@
-console.log("FINAL SYSTEM WITH DOWNLOAD FIX ✅");
+console.log("FINAL SYSTEM WITH VISUAL DASHBOARD ✅");
 
 const express = require("express");
 const multer = require("multer");
@@ -49,7 +49,6 @@ if (!fs.existsSync(USERS_FILE)) {
 }
 
 const getUsers = () => JSON.parse(fs.readFileSync(USERS_FILE));
-const saveUsers = (u) => fs.writeFileSync(USERS_FILE, JSON.stringify(u,null,2));
 
 // UI TEMPLATE
 function page(content){
@@ -60,10 +59,10 @@ return `
 <style>
 body{margin:0;font-family:Arial;display:flex;}
 .sidebar{width:220px;background:#0f7a2f;color:white;height:100vh;padding:20px;position:fixed;}
-.sidebar img{width:120px;margin:auto;display:block;margin-bottom:20px;}
-.sidebar a{display:block;color:white;margin:10px 0;text-decoration:none;}
+.sidebar img{width:130px;margin:auto;display:block;margin-bottom:20px;}
+.sidebar a{display:block;color:white;margin:12px 0;text-decoration:none;font-size:16px;}
 .main{margin-left:220px;padding:20px;width:100%;background:#f4f4f4;}
-.card{background:white;padding:20px;border-radius:10px;margin-bottom:20px;}
+.card{background:white;padding:20px;border-radius:12px;margin-bottom:20px;}
 .toast{background:green;color:white;padding:10px;margin-bottom:10px;}
 .btn{display:inline-block;padding:10px 15px;background:#0f7a2f;color:white;text-decoration:none;border-radius:6px;margin:5px 0;}
 @media(max-width:768px){
@@ -120,7 +119,7 @@ req.session.user=u;
 res.redirect("/dashboard");
 });
 
-// DASHBOARD
+// DASHBOARD WITH CHARTS + COLORS
 app.get("/dashboard",(req,res)=>{
 if(!fs.existsSync("output/result.xlsx")){
   return res.redirect("/home");
@@ -129,23 +128,75 @@ if(!fs.existsSync("output/result.xlsx")){
 const wb=xlsx.readFile("output/result.xlsx");
 const data=xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"]);
 
+const total = data.reduce((a,b)=>a+b.Total,0);
+const dup = data.reduce((a,b)=>a+b.Duplicates,0);
+
+const labels = data.map(r=>r.Agent);
+const values = data.map(r=>r.Total);
+
+function getColor(q){
+  if(q >= 90) return "#28a745";
+  if(q >= 75) return "#ffc107";
+  return "#dc3545";
+}
+
 res.send(page(`
 <div class="card">
-<h2>Dashboard</h2>
+<h2>📊 Dashboard</h2>
 
-<table border="1" width="100%">
-<tr><th>Agent</th><th>Van</th><th>Total</th><th>Duplicates</th><th>Quality</th></tr>
-${data.map(r=>`
+<div style="display:flex;gap:20px;margin-bottom:20px;">
+<div class="card" style="background:#0f7a2f;color:white;">Total<br><h2>${total}</h2></div>
+<div class="card" style="background:red;color:white;">Duplicates<br><h2>${dup}</h2></div>
+</div>
+
+<canvas id="barChart"></canvas>
+<br>
+<canvas id="pieChart"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+new Chart(document.getElementById("barChart"),{
+type:"bar",
+data:{
+labels:${JSON.stringify(labels)},
+datasets:[{data:${JSON.stringify(values)}}]
+}
+});
+
+new Chart(document.getElementById("pieChart"),{
+type:"pie",
+data:{
+labels:["Clean","Duplicates"],
+datasets:[{data:[${total-dup},${dup}]}]
+}
+});
+</script>
+
+<table border="1" width="100%" style="margin-top:20px;">
 <tr>
+<th>Rank</th>
+<th>Agent</th>
+<th>Van</th>
+<th>Total</th>
+<th>Duplicates</th>
+<th>Quality</th>
+<th>Status</th>
+</tr>
+
+${data.map(r=>`
+<tr style="background:${getColor(r["Quality %"])};color:white;">
+<td>${r.Rank}</td>
 <td>${r.Agent}</td>
 <td>${r["Van Plate"]}</td>
 <td>${r.Total}</td>
-<td style="color:red">${r.Duplicates}</td>
+<td>${r.Duplicates}</td>
 <td>${r["Quality %"]}%</td>
+<td>${r.Flag}</td>
 </tr>
 `).join("")}
-</table>
 
+</table>
 </div>
 `));
 });
@@ -164,7 +215,7 @@ app.get("/home",(req,res)=>res.send(page(`
 </div>
 `)));
 
-// PROCESS (FIXED)
+// PROCESS
 app.post("/process", upload.array("files", 2), (req, res) => {
 
   if (!req.files || req.files.length < 2) {
@@ -185,17 +236,8 @@ app.post("/process", upload.array("files", 2), (req, res) => {
       `));
     }
 
-    if (!fs.existsSync("output/result.xlsx")) {
-      return res.send(page(`
-        <div class="card">
-        ❌ Output file missing
-        </div>
-      `));
-    }
-
     const timestamp = new Date().toISOString().replace(/[:.]/g,"-");
     const filePath = `history/report-${timestamp}.xlsx`;
-
     fs.copyFileSync("output/result.xlsx", filePath);
 
     try {
@@ -206,16 +248,13 @@ app.post("/process", upload.array("files", 2), (req, res) => {
         text: "Attached",
         attachments: [{ path: filePath }]
       });
-    } catch(e) {
-      console.log("Email error:", e);
-    }
+    } catch(e) {}
 
     res.send(page(`
       <div class="toast">✅ Processed successfully</div>
 
       <div class="card">
         <h2>Download Report</h2>
-
         <a href="/download" class="btn">📥 Download Excel</a><br>
         <a href="/dashboard" class="btn">📊 View Dashboard</a>
       </div>
