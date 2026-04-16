@@ -1,12 +1,8 @@
-console.log("STABLE ENTERPRISE SYSTEM RUNNING ✅");
+console.log("MULTI-SOURCE SYSTEM (WHATSAPP + EXCEL) ✅");
 
-// 🔥 GLOBAL ERROR PROTECTION (prevents 502 crashes)
-process.on("uncaughtException", err => {
-  console.error("UNCAUGHT ERROR:", err);
-});
-process.on("unhandledRejection", err => {
-  console.error("UNHANDLED PROMISE:", err);
-});
+// 🔥 crash protection
+process.on("uncaughtException", err => console.error(err));
+process.on("unhandledRejection", err => console.error(err));
 
 const express = require("express");
 const multer = require("multer");
@@ -15,8 +11,6 @@ const fs = require("fs");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const xlsx = require("xlsx");
-const nodemailer = require("nodemailer");
-const PDFDocument = require("pdfkit");
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
@@ -24,7 +18,7 @@ const upload = multer({ dest: "uploads/" });
 app.use(express.urlencoded({ extended: true }));
 app.use("/assets", express.static("."));
 
-// ensure folders
+// folders
 ["uploads","output","history"].forEach(f=>{
   if(!fs.existsSync(f)) fs.mkdirSync(f);
 });
@@ -39,16 +33,7 @@ app.use(session({
 // root
 app.get("/", (req,res)=>res.redirect("/login"));
 
-// EMAIL (SAFE)
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: "yourgmail@gmail.com",
-    pass: "your_app_password"
-  }
-});
-
-// USERS
+// users
 const USERS_FILE="users.json";
 if(!fs.existsSync(USERS_FILE)){
   fs.writeFileSync(USERS_FILE, JSON.stringify([
@@ -80,7 +65,8 @@ body{margin:0;font-family:Arial;display:flex;}
 <div class="sidebar">
 <img src="/assets/logo.jpeg">
 <a href="/dashboard">Dashboard</a>
-<a href="/home">Upload</a>
+<a href="/home">Upload Excel</a>
+<a href="/whatsapp">WhatsApp Input</a>
 <a href="/logout">Logout</a>
 </div>
 
@@ -122,102 +108,68 @@ req.session.user=u;
 res.redirect("/dashboard");
 });
 
-// DASHBOARD
-app.get("/dashboard",(req,res)=>{
-if(!fs.existsSync("output/result.xlsx")) return res.redirect("/home");
+// WHATSAPP PAGE
+app.get("/whatsapp",(req,res)=>res.send(page(`
+<div class="card">
+<h2>📱 WhatsApp Input</h2>
 
-const wb=xlsx.readFile("output/result.xlsx");
-const data=xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"] || []);
+<form method="post">
+<textarea name="text" rows="10" style="width:100%" placeholder="Paste WhatsApp data here..."></textarea><br><br>
+<button>Save</button>
+</form>
+</div>
+`)));
 
-const total=data.reduce((a,b)=>a+(b.Total||0),0);
-const dup=data.reduce((a,b)=>a+(b.Duplicates||0),0);
-
-const labels=data.map(r=>r.Agent);
-const values=data.map(r=>r.Total);
-
-function color(q){
-  if(q>=90) return "#28a745";
-  if(q>=75) return "#ffc107";
-  return "#dc3545";
-}
-
+app.post("/whatsapp",(req,res)=>{
+fs.writeFileSync("uploads/whatsapp.txt", req.body.text || "");
 res.send(page(`
 <div class="card">
-<h2>Dashboard</h2>
-
-<canvas id="bar"></canvas><br>
-<canvas id="pie"></canvas>
-
-<script>
-new Chart(bar,{type:"bar",data:{labels:${JSON.stringify(labels)},datasets:[{data:${JSON.stringify(values)}}]}});
-new Chart(pie,{type:"pie",data:{labels:["Clean","Duplicates"],datasets:[{data:[${total-dup},${dup}]}]}});
-</script>
-
-<table border="1" width="100%">
-<tr><th>Rank</th><th>Agent</th><th>Total</th><th>Dup</th><th>Quality</th></tr>
-${data.map(r=>`
-<tr style="background:${color(r["Quality %"]||0)};color:white;">
-<td>${r.Rank||"-"}</td>
-<td>${r.Agent}</td>
-<td>${r.Total}</td>
-<td>${r.Duplicates}</td>
-<td>${r["Quality %"]}%</td>
-</tr>`).join("")}
-</table>
+<h2>✅ WhatsApp Data Saved</h2>
+<a href="/home" class="btn">Go Upload Excel</a>
 </div>
 `));
 });
 
-// HOME
+// HOME (UPLOAD)
 app.get("/home",(req,res)=>res.send(page(`
 <div class="card">
-<h2>Upload Files</h2>
+<h2>Upload Excel Files</h2>
+
 <form action="/process" method="post" enctype="multipart/form-data">
 <input type="file" name="files" required><br><br>
 <input type="file" name="files" required><br><br>
 <button>Process</button>
 </form>
+
 </div>
 `)));
 
-// PROCESS (SAFE)
+// PROCESS (WHATSAPP + EXCEL)
 app.post("/process", upload.array("files", 2), (req, res) => {
 
   if (!req.files || req.files.length < 2) {
-    return res.send(page(`<div class="card">❌ Upload 2 files</div>`));
+    return res.send(page(`<div class="card">❌ Upload 2 Excel files</div>`));
+  }
+
+  if (!fs.existsSync("uploads/whatsapp.txt")) {
+    return res.send(page(`<div class="card">❌ Add WhatsApp data first</div>`));
   }
 
   const file1 = req.files[0].path;
   const file2 = req.files[1].path;
 
-  exec(`python3 processor/compare.py ${file1} ${file2}`, async (err, stdout, stderr) => {
+  exec(`python3 processor/compare_all.py ${file1} ${file2} uploads/whatsapp.txt`, (err, stdout, stderr) => {
 
     if (err) {
       console.error(stderr);
-      return res.send(page(`<div class="card">❌ Python Error<br>${stderr}</div>`));
-    }
-
-    const filePath="output/result.xlsx";
-
-    // EMAIL SAFE
-    try{
-      await transporter.sendMail({
-        from:"yourgmail@gmail.com",
-        to:"receiver@email.com",
-        subject:"Report",
-        text:"Report attached",
-        attachments:[{path:filePath}]
-      });
-    }catch(e){
-      console.log("Email error:",e.message);
+      return res.send(page(`<div class="card">❌ ${stderr}</div>`));
     }
 
     res.send(page(`
       <div class="card">
-      <h2>✅ Done</h2>
-      <a href="/download" class="btn">Excel</a>
-      <a href="/download-pdf" class="btn">PDF</a>
-      <a href="/dashboard" class="btn">Dashboard</a>
+        <h2>✅ Combined Processing Done</h2>
+        <a href="/download" class="btn">📥 Download Excel</a>
+        <a href="/dashboard" class="btn">📊 View Dashboard</a>
       </div>
     `));
 
@@ -225,25 +177,37 @@ app.post("/process", upload.array("files", 2), (req, res) => {
 
 });
 
-// DOWNLOAD
-app.get("/download",(req,res)=>res.download("output/result.xlsx"));
+// DASHBOARD
+app.get("/dashboard",(req,res)=>{
+if(!fs.existsSync("output/result.xlsx")) return res.redirect("/home");
 
-// PDF
-app.get("/download-pdf",(req,res)=>{
-const doc=new PDFDocument();
-res.setHeader("Content-Type","application/pdf");
-doc.pipe(res);
-
-doc.text("Report Summary");
-doc.moveDown();
-
-try{
 const wb=xlsx.readFile("output/result.xlsx");
-const insights=xlsx.utils.sheet_to_json(wb.Sheets["Insights"]||[]);
-insights.forEach(i=>doc.text("- "+i.Insights));
-}catch{}
+const data=xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"] || []);
 
-doc.end();
+res.send(page(`
+<div class="card">
+<h2>Dashboard</h2>
+
+<table border="1" width="100%">
+<tr><th>Agent</th><th>Van</th><th>Total</th><th>Duplicates</th><th>Quality</th></tr>
+${data.map(r=>`
+<tr>
+<td>${r.Agent}</td>
+<td>${r["Van Plate"]}</td>
+<td>${r.Total}</td>
+<td>${r.Duplicates}</td>
+<td>${r["Quality %"]}%</td>
+</tr>
+`).join("")}
+</table>
+
+</div>
+`));
+});
+
+// DOWNLOAD
+app.get("/download",(req,res)=>{
+  res.download("output/result.xlsx");
 });
 
 // LOGOUT
@@ -251,6 +215,7 @@ app.get("/logout",(req,res)=>{
 req.session.destroy(()=>res.redirect("/login"));
 });
 
-app.listen(process.env.PORT || 10000, () => {
-  console.log("Server started...");
+// START
+app.listen(process.env.PORT || 10000, ()=>{
+  console.log("Server running...");
 });
