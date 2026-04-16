@@ -36,12 +36,10 @@ def extract_agent_van(val):
     if pd.isna(val):
         return ("Unknown", "Unknown")
 
-    text = str(val)
-    parts = text.split()
-
+    parts = str(val).split()
     if len(parts) >= 2:
         return (parts[0], parts[-1])
-    return (text, "Unknown")
+    return (val, "Unknown")
 
 if "BA NAME &VAN" in df1.columns:
     df1[["Agent", "Van Plate"]] = df1["BA NAME &VAN"].apply(
@@ -51,37 +49,47 @@ else:
     df1["Agent"] = "Unknown"
     df1["Van Plate"] = "Unknown"
 
-# 🔥 DETECT INTERNAL DUPLICATES
+# INTERNAL DUPLICATES
 df1["Internal Duplicate"] = df1.duplicated(subset=["serial"], keep=False)
 
-# REMOVE UNIQUE LISTS
+# UNIQUE
 df1_unique = df1.drop_duplicates(subset=["serial"])
 df2_unique = df2.drop_duplicates(subset=["serial"])
 
-# 🔥 CROSS FILE DUPLICATES
+# CROSS DUPLICATES
 common = set(df1_unique["serial"]).intersection(set(df2_unique["serial"]))
-df1_unique["Cross Duplicate"] = df1_unique["serial"].apply(lambda x: x in common)
+df1_unique["Duplicate"] = df1_unique["serial"].apply(lambda x: x in common)
 
-# TOTAL DUPLICATE FLAG
-df1_unique["Duplicate"] = df1_unique["Cross Duplicate"]
-
-# GROUP
+# SUMMARY
 summary = df1_unique.groupby(["Agent", "Van Plate"]).agg(
     Total=("serial", "count"),
     Duplicates=("Duplicate", "sum")
 ).reset_index()
 
-# QUALITY
 summary["Quality %"] = ((summary["Total"] - summary["Duplicates"]) / summary["Total"] * 100).round(1)
 
-# 🚨 FLAG SUSPICIOUS
+# FLAGS
 summary["Flag"] = summary["Quality %"].apply(
     lambda q: "⚠️ Suspicious" if q < 80 else "✅ Good"
 )
 
-# 🏆 RANK AGENTS
 summary = summary.sort_values(by="Quality %", ascending=False)
-summary["Rank"] = range(1, len(summary) + 1)
+summary["Rank"] = range(1, len(summary)+1)
+
+# 🧠 AI INSIGHTS
+insights = []
+
+for _, row in summary.iterrows():
+    if row["Quality %"] < 75:
+        insights.append(f"{row['Agent']} has LOW quality ({row['Quality %']}%)")
+
+    if row["Duplicates"] > 20:
+        insights.append(f"{row['Agent']} has HIGH duplicates ({row['Duplicates']})")
+
+if not insights:
+    insights.append("All agents performing well")
+
+insights_df = pd.DataFrame({"Insights": insights})
 
 # SAVE
 output_file = "output/result.xlsx"
@@ -90,5 +98,6 @@ with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
     df1.to_excel(writer, sheet_name="Raw with Flags", index=False)
     df1_unique.to_excel(writer, sheet_name="Cleaned", index=False)
     summary.to_excel(writer, sheet_name="Dashboard", index=False)
+    insights_df.to_excel(writer, sheet_name="Insights", index=False)
 
 print("Advanced Processing Complete ✅")
