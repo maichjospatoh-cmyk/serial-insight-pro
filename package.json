@@ -11,6 +11,7 @@
     "express-session": "^1.17.3",
     "xlsx": "^0.18.5",
     "bcryptjs": "^2.4.3",
-    "nodemailer": "^6.9.11"
+    "nodemailer": "^6.9.11",
+    "pdfkit": "^0.15.0"
   }
 }
