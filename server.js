@@ -74,6 +74,10 @@ ${content}
 </html>`;
 }
 
+app.get("/", (req, res) => {
+  res.redirect("/login");
+});
+
 // auth
 app.use((req,res,next)=>{
   if(req.path==="/login") return next();
