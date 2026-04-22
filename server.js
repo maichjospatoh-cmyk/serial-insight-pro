@@ -1,6 +1,6 @@
-console.log("MULTI-SOURCE SYSTEM (WHATSAPP + EXCEL) ✅");
+console.log("SMART MULTI-SOURCE SYSTEM FINAL ✅");
 
-// 🔥 crash protection
+// crash protection
 process.on("uncaughtException", err => console.error(err));
 process.on("unhandledRejection", err => console.error(err));
 
@@ -18,8 +18,8 @@ const upload = multer({ dest: "uploads/" });
 app.use(express.urlencoded({ extended: true }));
 app.use("/assets", express.static("."));
 
-// folders
-["uploads","output","history"].forEach(f=>{
+// ensure folders
+["uploads","output"].forEach(f=>{
   if(!fs.existsSync(f)) fs.mkdirSync(f);
 });
 
@@ -30,9 +30,6 @@ app.use(session({
   saveUninitialized: false
 }));
 
-// root
-app.get("/", (req,res)=>res.redirect("/login"));
-
 // users
 const USERS_FILE="users.json";
 if(!fs.existsSync(USERS_FILE)){
@@ -42,13 +39,12 @@ if(!fs.existsSync(USERS_FILE)){
 }
 const getUsers=()=>JSON.parse(fs.readFileSync(USERS_FILE));
 
-// UI
+// UI TEMPLATE
 function page(content){
 return `
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body{margin:0;font-family:Arial;display:flex;}
 .sidebar{width:220px;background:#0f7a2f;color:white;height:100vh;padding:20px;position:fixed;}
@@ -78,14 +74,14 @@ ${content}
 </html>`;
 }
 
-// AUTH
+// auth
 app.use((req,res,next)=>{
   if(req.path==="/login") return next();
   if(!req.session.user) return res.redirect("/login");
   next();
 });
 
-// LOGIN
+// login
 app.get("/login",(req,res)=>res.send(`
 <body style="text-align:center;background:#0f7a2f;padding-top:100px">
 <img src="/assets/logo.jpeg" width="150"><br><br>
@@ -100,15 +96,13 @@ app.get("/login",(req,res)=>res.send(`
 app.post("/login",async(req,res)=>{
 const u=getUsers().find(x=>x.username===req.body.username);
 if(!u) return res.send("Invalid login");
-
 if(!(await bcrypt.compare(req.body.password,u.password)))
   return res.send("Invalid login");
-
 req.session.user=u;
 res.redirect("/dashboard");
 });
 
-// WHATSAPP PAGE
+// WHATSAPP INPUT
 app.get("/whatsapp",(req,res)=>res.send(page(`
 <div class="card">
 <h2>📱 WhatsApp Input</h2>
@@ -130,75 +124,123 @@ res.send(page(`
 `));
 });
 
-// HOME (UPLOAD)
+// HOME
 app.get("/home",(req,res)=>res.send(page(`
 <div class="card">
 <h2>Upload Excel Files</h2>
 
 <form action="/process" method="post" enctype="multipart/form-data">
-<input type="file" name="files" required><br><br>
-<input type="file" name="files" required><br><br>
+<input type="file" name="files"><br><br>
+<input type="file" name="files"><br><br>
 <button>Process</button>
 </form>
+
+<p>👉 Upload 1 file = WhatsApp vs Excel</p>
+<p>👉 Upload 2 files = Full comparison</p>
 
 </div>
 `)));
 
-// PROCESS (WHATSAPP + EXCEL)
+// PROCESS (AUTO MODE)
 app.post("/process", upload.array("files", 2), (req, res) => {
-
-  if (!req.files || req.files.length < 2) {
-    return res.send(page(`<div class="card">❌ Upload 2 Excel files</div>`));
-  }
 
   if (!fs.existsSync("uploads/whatsapp.txt")) {
     return res.send(page(`<div class="card">❌ Add WhatsApp data first</div>`));
   }
 
-  const file1 = req.files[0].path;
-  const file2 = req.files[1].path;
+  const files = req.files;
 
-  exec(`python3 processor/compare_all.py ${file1} ${file2} uploads/whatsapp.txt`, (err, stdout, stderr) => {
+  if (!files || files.length === 0) {
+    return res.send(page(`<div class="card">❌ Upload at least 1 file</div>`));
+  }
 
-    if (err) {
-      console.error(stderr);
-      return res.send(page(`<div class="card">❌ ${stderr}</div>`));
-    }
+  // 🔥 2 FILES
+  if (files.length === 2) {
+    exec(`python3 processor/compare_all.py ${files[0].path} ${files[1].path} uploads/whatsapp.txt`,
+    (err, stdout, stderr) => {
 
-    res.send(page(`
-      <div class="card">
-        <h2>✅ Combined Processing Done</h2>
-        <a href="/download" class="btn">📥 Download Excel</a>
-        <a href="/dashboard" class="btn">📊 View Dashboard</a>
-      </div>
-    `));
+      if (err) return res.send(page(`<div class="card">❌ ${stderr}</div>`));
 
-  });
+      return res.send(page(`
+        <div class="card">
+          <h2>✅ Smart Processing Complete</h2>
+          <p>✔ Mode: Excel + Excel + WhatsApp</p>
+
+          <a href="/download" class="btn">📥 Download Excel</a>
+          <a href="/dashboard" class="btn">📊 View Dashboard</a>
+        </div>
+      `));
+    });
+  }
+
+  // 🔥 1 FILE
+  else if (files.length === 1) {
+    exec(`python3 processor/compare_single.py ${files[0].path} uploads/whatsapp.txt`,
+    (err, stdout, stderr) => {
+
+      if (err) return res.send(page(`<div class="card">❌ ${stderr}</div>`));
+
+      return res.send(page(`
+        <div class="card">
+          <h2>✅ Smart Processing Complete</h2>
+          <p>✔ Mode: Excel + WhatsApp</p>
+
+          <a href="/download" class="btn">📥 Download Excel</a>
+          <a href="/dashboard" class="btn">📊 View Dashboard</a>
+        </div>
+      `));
+    });
+  }
 
 });
 
-// DASHBOARD
+// DASHBOARD (COLOR CODED)
 app.get("/dashboard",(req,res)=>{
 if(!fs.existsSync("output/result.xlsx")) return res.redirect("/home");
 
-const wb=xlsx.readFile("output/result.xlsx");
-const data=xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"] || []);
+const wb = xlsx.readFile("output/result.xlsx");
+const data = xlsx.utils.sheet_to_json(wb.Sheets["Dashboard"] || []);
+
+const total = data.reduce((a,b)=>a+(b.Total||0),0);
+const found = data.reduce((a,b)=>a+(b.Found||0),0);
 
 res.send(page(`
 <div class="card">
-<h2>Dashboard</h2>
+<h2>📊 Smart Dashboard</h2>
+
+<div style="display:flex;gap:20px;margin-bottom:20px;">
+  <div class="card" style="background:#0f7a2f;color:white;">
+    Total<br><h2>${total}</h2>
+  </div>
+  <div class="card" style="background:#007bff;color:white;">
+    Found<br><h2>${found}</h2>
+  </div>
+</div>
 
 <table border="1" width="100%">
-<tr><th>Agent</th><th>Van</th><th>Total</th><th>Duplicates</th><th>Quality</th></tr>
-${data.map(r=>`
 <tr>
-<td>${r.Agent}</td>
-<td>${r["Van Plate"]}</td>
-<td>${r.Total}</td>
-<td>${r.Duplicates}</td>
-<td>${r["Quality %"]}%</td>
+<th>Agent</th>
+<th>Van</th>
+<th>Total</th>
+<th>Found</th>
+<th>Match %</th>
 </tr>
-`).join("")}
+
+${data.map(r=>{
+let color = "#28a745";
+if((r["Match %"]||0) < 80) color = "#dc3545";
+else if((r["Match %"]||0) < 90) color = "#ffc107";
+
+return `
+<tr style="background:${color};color:white;">
+<td>${r.Agent||"-"}</td>
+<td>${r["Van Plate"]||"-"}</td>
+<td>${r.Total||0}</td>
+<td>${r.Found||0}</td>
+<td>${r["Match %"]||0}%</td>
+</tr>`;
+}).join("")}
+
 </table>
 
 </div>
