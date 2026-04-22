@@ -23,6 +23,7 @@ for line in lines:
 
 wa_df = pd.DataFrame(wa_data, columns=["Agent","Van Plate","serial"])
 
+# SERIAL CLEAN
 def extract_serial(text):
     match = re.search(r"\b\d{8,}\b", text)
     return match.group(0) if match else None
@@ -34,30 +35,43 @@ df["serial"] = df.apply(
 
 df = df.dropna(subset=["serial"])
 
-# EXTRACT AGENT
+# AGENT EXTRACTION
 if "BA NAME &VAN" in df.columns:
     df[["Agent","Van Plate"]] = df["BA NAME &VAN"].apply(
         lambda x: pd.Series(str(x).split()[:1] + str(x).split()[-1:])
     )
 
-# 🔥 COMPARE WHATSAPP VS EXCEL
+# SETS
 excel_set = set(df["serial"])
 wa_set = set(wa_df["serial"])
 
-df["In WhatsApp"] = df["serial"].apply(lambda x: x in wa_set)
+# FLAGS
+df["Status"] = df["serial"].apply(
+    lambda x: "✅ Found" if x in wa_set else "❌ Missing"
+)
+
+wa_df["Status"] = wa_df["serial"].apply(
+    lambda x: "✅ In Excel" if x in excel_set else "❌ Not in Excel"
+)
+
+# MISSING LISTS
+missing_in_wa = df[~df["serial"].isin(wa_set)]
+missing_in_excel = wa_df[~wa_df["serial"].isin(excel_set)]
 
 # SUMMARY
 summary = df.groupby(["Agent","Van Plate"]).agg(
     Total=("serial","count"),
-    Found_in_WhatsApp=("In WhatsApp","sum")
+    Found=("Status", lambda x: (x=="✅ Found").sum())
 ).reset_index()
 
-summary["Match %"] = ((summary["Found_in_WhatsApp"] / summary["Total"]) * 100).round(1)
+summary["Match %"] = ((summary["Found"]/summary["Total"])*100).round(1)
 
 # SAVE
 with pd.ExcelWriter("output/result.xlsx") as writer:
     df.to_excel(writer, sheet_name="Excel Data", index=False)
     wa_df.to_excel(writer, sheet_name="WhatsApp Data", index=False)
+    missing_in_wa.to_excel(writer, sheet_name="Missing in WhatsApp", index=False)
+    missing_in_excel.to_excel(writer, sheet_name="Missing in Excel", index=False)
     summary.to_excel(writer, sheet_name="Dashboard", index=False)
 
-print("Single file processing complete ✅")
+print("Smart comparison complete ✅")
